@@ -12,12 +12,11 @@ export default function Login() {
   const [info, setInfo]     = useState('')
   const [loading, setLoading] = useState(false)
 
-  async function handleAuth(e) {
+ async function handleAuth(e) {
     e.preventDefault()
     setErr(''); setInfo(''); setLoading(true)
     try {
       if (signup) {
-        // Check email is pre-registered
         const { data: existing } = await supabase.from('learners').select('id').eq('email', email).maybeSingle()
         if (!existing) {
           setErr('This email is not registered. Ask your Skillinabox coordinator to add you first.')
@@ -28,9 +27,10 @@ export default function Login() {
         setInfo('Account created! You can now sign in.')
         setSignup(false)
       } else {
-        const { error } = await supabase.auth.signInWithPassword({ email, password: pass })
+        const { data, error } = await supabase.auth.signInWithPassword({ email, password: pass })
         if (error) throw error
-        // Navigation handled by auth state change in App.jsx
+        const role = data.user ? (await supabase.from('profiles').select('role').eq('id', data.user.id).single()).data?.role : null
+        window.location.href = role === 'admin' ? '/admin' : '/dashboard'
       }
     } catch(e) {
       setErr(e.message || 'Something went wrong')
