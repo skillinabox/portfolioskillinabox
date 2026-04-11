@@ -520,7 +520,7 @@ export default function Admin() {
     </div>
   )
 
-  var unreadEnq = enquiries.filter(e=>!e.read).length
+ 
 }
 
 function FieldRow({ label, value, onChange, ai }) {
