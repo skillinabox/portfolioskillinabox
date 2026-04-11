@@ -20,7 +20,7 @@ export default function Admin() {
   const toast = useToast()
 
   const [learners,     setLearners]     = useState([])
-  const [selLid,       setSelLid]       = useState(null)
+  const [selLid,       setSelLid]       = useState(() => localStorage.getItem('snb_selLid') || null)
   const [collections,  setCollections]  = useState([])
   const [garments,     setGarments]     = useState([])
   const [enquiries,    setEnquiries]    = useState([])
@@ -29,7 +29,7 @@ export default function Admin() {
   const [loadingL,     setLoadingL]     = useState(true)
   const [loadingG,     setLoadingG]     = useState(false)
   const [search,       setSearch]       = useState('')
-  const [tab,          setTab]          = useState('garments')
+  const [tab,          setTab]          = useState(() => localStorage.getItem('snb_tab') || 'garments')
   const [publishing,   setPublishing]   = useState(false)
   const [showAdd,      setShowAdd]      = useState(false)
   const [showAddCol,   setShowAddCol]   = useState(false)
@@ -45,7 +45,8 @@ export default function Admin() {
   const selEnquiry = enquiries.find(e => e.id === selEnqId)
 
   useEffect(() => { loadLearners() }, [])
-  useEffect(() => { if (selLid) { loadAll(selLid) } }, [selLid])
+  useEffect(() => { if (selLid) { loadAll(selLid); localStorage.setItem('snb_selLid', selLid) } }, [selLid])
+  useEffect(() => { localStorage.setItem('snb_tab', tab) }, [tab])
 
   async function loadLearners() {
     setLoadingL(true)
@@ -344,9 +345,23 @@ export default function Admin() {
                         </select>
                       </div>
 
+                      {/* Gender for AI poses */}
+                      <div style={{ marginBottom:14 }}>
+                        <label style={{ fontSize:11, color:'#aaa', display:'block', marginBottom:6 }}>Model gender for AI poses</label>
+                        <div style={{ display:'flex', gap:6 }}>
+                          {[['female','👩 Female'],['male','👨 Male'],['unisex','✦ Unisex']].map(([g,label])=>(
+                            <button key={g} onClick={()=>updateGarment('gender',g)}
+                              style={{ flex:1, padding:'7px 6px', fontSize:12, fontWeight:500, borderRadius:8, border:`1px solid ${(garment.gender||'female')===g?'#F4622A':'#E2E0DC'}`, background:(garment.gender||'female')===g?'#FEF0EA':'#fff', color:(garment.gender||'female')===g?'#C94E1E':'#888', cursor:'pointer', fontFamily:'inherit' }}>
+                              {label}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
                       <div style={{ fontSize:11, fontWeight:600, color:'#aaa', textTransform:'uppercase', letterSpacing:'.05em', marginBottom:10 }}>AI-detected details</div>
                       {[['Garment name','name'],['Category','category'],['Fabric','fabric'],['Key features','features'],['Colour','colour'],['Occasion','occasion']].map(([l,f])=>(
                         <FieldRow key={f} label={l} value={garment[f]} onChange={v=>updateGarment(f,v)} ai={garment.ai_tagged}/>
+
                       ))}
 
                       <div style={{ fontSize:11, fontWeight:600, color:'#aaa', textTransform:'uppercase', letterSpacing:'.05em', margin:'14px 0 10px' }}>Pricing & availability</div>
@@ -369,7 +384,7 @@ export default function Admin() {
                   </div>
 
                   {/* ── POSE GENERATION ── */}
-                  <PoseSection garment={garment} onUpdate={updateGarment} toast={toast} s={{ btn, card }}/>
+                  <PoseSection garment={garment} onUpdate={updateGarment} toast={toast}/>
                 </div>
               )}
             </>}
@@ -522,8 +537,6 @@ export default function Admin() {
       )}
     </div>
   )
-
-  
 }
 
 function FieldRow({ label, value, onChange, ai }) {
@@ -539,120 +552,125 @@ function FieldRow({ label, value, onChange, ai }) {
 
 // ── Pose Generation Section ───────────────────────────────────
 const POSE_LABELS = [
-  { key:'front',   label:'Front view',   icon:'👗', prompt:'Indian woman, front view' },
-  { key:'side',    label:'Side view',    icon:'↔',  prompt:'Indian woman, side view' },
-  { key:'walking', label:'Walking',      icon:'🚶', prompt:'Indian woman, walking' },
-  { key:'sitting', label:'Sitting',      icon:'🪑', prompt:'Indian woman, sitting' },
+  { key:'front',   label:'Front view', icon:'👗' },
+  { key:'side',    label:'Side view',  icon:'↔'  },
+  { key:'walking', label:'Walking',    icon:'🚶' },
+  { key:'sitting', label:'Sitting',    icon:'🪑' },
 ]
+const POLL_INTERVAL = 6000
 
-function PoseSection({ garment, onUpdate, toast, s }) {
-  const [generating, setGenerating] = useState(false)
-  const [genKey, setGenKey]         = useState(null) // which pose is generating
+function PoseSection({ garment, onUpdate, toast }) {
+  const [submitting, setSubmitting] = useState(false)
+  const pollRef = useRef(null)
 
-  const poses = garment.poses || {}
-  const hasPoses = Object.values(poses).some(Boolean)
+  const poses        = garment.poses        || {}
+  const pendingPoses = garment.pending_poses || {}
+  const hasPending   = Object.keys(pendingPoses).length > 0
+  const hasPoses     = Object.values(poses).some(Boolean)
 
-  async function generateAll() {
-    if (!garment.image_url) { toast('Upload a garment image first', 'error'); return }
-    setGenerating(true)
-    try {
-      const res = await fetch('/api/generate-poses', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ garment_image_url: garment.image_url }),
-      })
-      const data = await res.json()
-      if (data.error) throw new Error(data.error)
-      const merged = { ...poses, ...data.poses }
-      await onUpdate('poses', merged)
-      toast('All poses generated ✓', 'success')
-    } catch (err) {
-      toast(err.message || 'Pose generation failed', 'error')
-    }
-    setGenerating(false)
+  useEffect(() => {
+    if (Object.keys(pendingPoses).length > 0) startPolling(pendingPoses)
+    return () => clearInterval(pollRef.current)
+  }, [garment.id])
+
+  function startPolling(ids) {
+    clearInterval(pollRef.current)
+    pollRef.current = setInterval(() => pollPoses(ids), POLL_INTERVAL)
   }
 
-  async function generateOne(poseKey) {
-    if (!garment.image_url) { toast('Upload a garment image first', 'error'); return }
-    setGenKey(poseKey)
+  async function pollPoses(ids) {
+    if (!ids || Object.keys(ids).length === 0) { clearInterval(pollRef.current); return }
     try {
-      const res = await fetch('/api/generate-poses', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ garment_image_url: garment.image_url, pose_key: poseKey }),
+      const res = await fetch('/api/check-poses', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prediction_ids: ids }),
+      })
+      const data = await res.json()
+      if (Object.keys(data.results||{}).length > 0) {
+        await onUpdate('poses', { ...poses, ...data.results })
+      }
+      if (!data.still_pending || Object.keys(data.still_pending).length === 0) {
+        clearInterval(pollRef.current)
+        await onUpdate('pending_poses', {})
+        if (Object.keys(data.results||{}).length > 0) toast('All poses ready ✓', 'success')
+      } else {
+        await onUpdate('pending_poses', data.still_pending)
+      }
+    } catch(e) { console.error('Poll error:', e) }
+  }
+
+  async function handleGenerate(poseKey) {
+    if (!garment.image_url) { toast('Upload a garment image first', 'error'); return }
+    setSubmitting(true)
+    try {
+      const res = await fetch('/api/submit-poses', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ garment_image_url: garment.image_url, gender: garment.gender||'female', pose_key: poseKey||undefined }),
       })
       const data = await res.json()
       if (data.error) throw new Error(data.error)
-      const merged = { ...poses, ...data.poses }
-      await onUpdate('poses', merged)
-      toast(`${poseKey} pose generated ✓`, 'success')
-    } catch (err) {
-      toast(err.message || 'Failed', 'error')
-    }
-    setGenKey(null)
+      const newPending = { ...pendingPoses, ...data.prediction_ids }
+      await onUpdate('pending_poses', newPending)
+      startPolling(newPending)
+      toast(poseKey ? `Generating ${poseKey}…` : 'Generating all poses — safe to switch screens ✓', 'default')
+    } catch(err) { toast(err.message||'Failed', 'error') }
+    setSubmitting(false)
   }
 
   if (!garment.image_url) return null
 
   return (
     <div style={{ borderTop:'1px solid #F0EEE9', padding:16 }}>
-      <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:14 }}>
+      <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:14, gap:12, flexWrap:'wrap' }}>
         <div>
           <div style={{ fontSize:13, fontWeight:600, color:'#111' }}>AI model poses</div>
-          <div style={{ fontSize:12, color:'#888', marginTop:2 }}>
-            Powered by Fashn.ai · ~$0.07 per set · Takes 30–120 seconds
-          </div>
+          <div style={{ fontSize:12, color:'#888', marginTop:2 }}>Powered by Fashn.ai · {garment.gender==='male'?'Male':'Female'} model · ~$0.07 per set</div>
+          {hasPending && <div style={{ fontSize:11, color:'#F4622A', marginTop:4, display:'flex', alignItems:'center', gap:5 }}><Spinner size={11} color="#F4622A"/> Generating — safe to switch screens</div>}
         </div>
-        <button
-          style={{ ...s.btn('primary'), opacity: generating ? .6 : 1 }}
-          onClick={generateAll}
-          disabled={generating}
-        >
-          {generating ? <><Spinner size={13} color="#fff"/> Generating all poses…</> : '✦ Generate all poses'}
+        <button onClick={()=>handleGenerate(null)} disabled={submitting||hasPending}
+          style={{ display:'inline-flex', alignItems:'center', gap:6, padding:'7px 16px', fontSize:12, fontWeight:500, borderRadius:8, border:'1px solid #F4622A', background:'#F4622A', color:'#fff', cursor:'pointer', fontFamily:'inherit', opacity:submitting||hasPending?.6:1 }}>
+          {submitting?<><Spinner size={12} color="#fff"/> Submitting…</>:hasPending?<><Spinner size={12} color="#fff"/> Generating…</>:'✦ Generate all poses'}
         </button>
       </div>
-
       <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:10 }}>
-        {POSE_LABELS.map(p => (
-          <div key={p.key} style={{ borderRadius:10, overflow:'hidden', border:'1px solid #E8E6E2', background:'#FAFAFA', position:'relative' }}>
-            {poses[p.key] ? (
-              <>
-                <img src={poses[p.key]} alt={p.label} style={{ width:'100%', aspectRatio:'3/4', objectFit:'cover', display:'block' }}/>
-                <div style={{ position:'absolute', bottom:0, left:0, right:0, padding:'6px 8px', background:'linear-gradient(to top,rgba(0,0,0,.6),transparent)', display:'flex', alignItems:'center', justifyContent:'space-between' }}>
-                  <span style={{ fontSize:10, color:'#fff', fontWeight:500 }}>{p.label}</span>
-                  <button onClick={()=>generateOne(p.key)} disabled={genKey===p.key}
-                    style={{ fontSize:9, padding:'2px 6px', background:'rgba(255,255,255,.2)', border:'none', borderRadius:4, color:'#fff', cursor:'pointer', fontFamily:'inherit' }}>
-                    {genKey===p.key ? '…' : 'Redo'}
-                  </button>
-                </div>
-              </>
-            ) : (
-              <div style={{ aspectRatio:'3/4', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:6, padding:8 }}>
-                {genKey===p.key || generating ? (
-                  <>
-                    <Spinner size={20} color="#F4622A"/>
-                    <div style={{ fontSize:10, color:'#aaa', textAlign:'center' }}>Generating…<br/>30-120s</div>
-                  </>
-                ) : (
-                  <>
-                    <div style={{ fontSize:24, opacity:.3 }}>{p.icon}</div>
-                    <div style={{ fontSize:10, color:'#bbb', textAlign:'center' }}>{p.label}</div>
-                    <button onClick={()=>generateOne(p.key)}
-                      style={{ fontSize:10, padding:'4px 8px', background:'#F4622A', border:'none', borderRadius:5, color:'#fff', cursor:'pointer', fontFamily:'inherit', marginTop:2 }}>
-                      Generate
+        {POSE_LABELS.map(p => {
+          const isPending = p.key in pendingPoses
+          const isDone    = !!poses[p.key]
+          return (
+            <div key={p.key} style={{ borderRadius:10, overflow:'hidden', border:`1px solid ${isDone?'#E8E6E2':'#F0EEE9'}`, background:'#FAFAFA', position:'relative' }}>
+              {isDone ? (
+                <>
+                  <img src={poses[p.key]} alt={p.label} style={{ width:'100%', aspectRatio:'3/4', objectFit:'cover', display:'block' }}/>
+                  <div style={{ position:'absolute', bottom:0, left:0, right:0, padding:'6px 8px', background:'linear-gradient(to top,rgba(0,0,0,.65),transparent)', display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+                    <span style={{ fontSize:10, color:'#fff', fontWeight:500 }}>{p.label}</span>
+                    <button onClick={()=>handleGenerate(p.key)} disabled={submitting||isPending}
+                      style={{ fontSize:9, padding:'2px 6px', background:'rgba(255,255,255,.2)', border:'none', borderRadius:4, color:'#fff', cursor:'pointer', fontFamily:'inherit' }}>
+                      {isPending?'…':'Redo'}
                     </button>
-                  </>
-                )}
-              </div>
-            )}
-          </div>
-        ))}
+                  </div>
+                </>
+              ) : (
+                <div style={{ aspectRatio:'3/4', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:6, padding:8 }}>
+                  {isPending ? (
+                    <><Spinner size={20} color="#F4622A"/><div style={{ fontSize:10, color:'#aaa', textAlign:'center', lineHeight:1.4 }}>Generating…<br/>safe to switch</div></>
+                  ) : (
+                    <>
+                      <div style={{ fontSize:22, opacity:.25 }}>{p.icon}</div>
+                      <div style={{ fontSize:10, color:'#bbb', textAlign:'center' }}>{p.label}</div>
+                      <button onClick={()=>handleGenerate(p.key)} disabled={submitting}
+                        style={{ fontSize:10, padding:'4px 8px', background:'#F4622A', border:'none', borderRadius:5, color:'#fff', cursor:'pointer', fontFamily:'inherit', marginTop:2 }}>Generate</button>
+                    </>
+                  )}
+                </div>
+              )}
+            </div>
+          )
+        })}
       </div>
-
-      {hasPoses && (
+      {hasPoses && !hasPending && (
         <div style={{ marginTop:10, fontSize:12, color:'#888', display:'flex', alignItems:'center', gap:6 }}>
           <span style={{ width:7, height:7, borderRadius:'50%', background:'#0D6B3A', display:'inline-block' }}/>
-          Poses are visible on the portfolio website
+          Poses visible on portfolio website
         </div>
       )}
     </div>
