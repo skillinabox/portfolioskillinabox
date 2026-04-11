@@ -40,7 +40,7 @@ export default async function handler(req, res) {
     const text = await callClaude([{ role: 'user', content: [
       { type: 'image', source: { type: 'base64', media_type: body.mime_type, data: body.image_base64 } },
       { type: 'text', text: `Fashion expert for an Indian fashion platform. Analyse this garment and return ONLY valid JSON, no other text:
-{"name":"full descriptive garment name","category":"one of: Indian wear — Anarkali | Indian wear — Saree | Indian wear — Lehenga | Indian wear — Kurti set | Indian wear — Salwar suit | Western wear — Dress | Western wear — Top | Western wear — Coord set | Fusion | Bridal wear","fabric":"fabric types","features":"2-4 key features comma separated","colour":"primary colours","occasion":"occasions comma separated","description":"2 sentence premium product description"}` }
+{"name":"full descriptive garment name","category":"one of: Indian wear — Anarkali | Indian wear — Saree | Indian wear — Lehenga | Indian wear — Kurti set | Indian wear — Salwar suit | Western wear — Dress | Western wear — Top | Western wear — Coord set | Fusion | Bridal wear | Menswear — Kurta | Menswear — Sherwani | Menswear — Suit | Menswear — Casual","fabric":"fabric types","features":"2-4 key features comma separated","colour":"primary colours","occasion":"occasions comma separated","description":"2 sentence premium product description","gender":"female or male based on the garment style and target wearer"}` }
     ]}], 700)
 
     let tags = {}
