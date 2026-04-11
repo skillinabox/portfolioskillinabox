@@ -367,6 +367,9 @@ export default function Admin() {
                       </div>
                     </div>
                   </div>
+
+                  {/* ── POSE GENERATION ── */}
+                  <PoseSection garment={garment} onUpdate={updateGarment} toast={toast} s={{ btn, card }}/>
                 </div>
               )}
             </>}
@@ -520,7 +523,7 @@ export default function Admin() {
     </div>
   )
 
- 
+  var unreadEnq = enquiries.filter(e=>!e.read).length
 }
 
 function FieldRow({ label, value, onChange, ai }) {
@@ -530,6 +533,128 @@ function FieldRow({ label, value, onChange, ai }) {
       <input value={value||''} onChange={e=>onChange(e.target.value)}
         style={{ flex:1, fontSize:13, padding:'5px 9px', border:'1px solid #E2E0DC', borderRadius:7, outline:'none', fontFamily:'inherit' }}/>
       {ai&&<span style={{ fontSize:10, padding:'2px 6px', borderRadius:20, background:'#F0EFFE', color:'#5B21B6', flexShrink:0 }}>AI</span>}
+    </div>
+  )
+}
+
+// ── Pose Generation Section ───────────────────────────────────
+const POSE_LABELS = [
+  { key:'front',   label:'Front view',   icon:'👗', prompt:'Indian woman, front view' },
+  { key:'side',    label:'Side view',    icon:'↔',  prompt:'Indian woman, side view' },
+  { key:'walking', label:'Walking',      icon:'🚶', prompt:'Indian woman, walking' },
+  { key:'sitting', label:'Sitting',      icon:'🪑', prompt:'Indian woman, sitting' },
+]
+
+function PoseSection({ garment, onUpdate, toast, s }) {
+  const [generating, setGenerating] = useState(false)
+  const [genKey, setGenKey]         = useState(null) // which pose is generating
+
+  const poses = garment.poses || {}
+  const hasPoses = Object.values(poses).some(Boolean)
+
+  async function generateAll() {
+    if (!garment.image_url) { toast('Upload a garment image first', 'error'); return }
+    setGenerating(true)
+    try {
+      const res = await fetch('/api/generate-poses', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ garment_image_url: garment.image_url }),
+      })
+      const data = await res.json()
+      if (data.error) throw new Error(data.error)
+      const merged = { ...poses, ...data.poses }
+      await onUpdate('poses', merged)
+      toast('All poses generated ✓', 'success')
+    } catch (err) {
+      toast(err.message || 'Pose generation failed', 'error')
+    }
+    setGenerating(false)
+  }
+
+  async function generateOne(poseKey) {
+    if (!garment.image_url) { toast('Upload a garment image first', 'error'); return }
+    setGenKey(poseKey)
+    try {
+      const res = await fetch('/api/generate-poses', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ garment_image_url: garment.image_url, pose_key: poseKey }),
+      })
+      const data = await res.json()
+      if (data.error) throw new Error(data.error)
+      const merged = { ...poses, ...data.poses }
+      await onUpdate('poses', merged)
+      toast(`${poseKey} pose generated ✓`, 'success')
+    } catch (err) {
+      toast(err.message || 'Failed', 'error')
+    }
+    setGenKey(null)
+  }
+
+  if (!garment.image_url) return null
+
+  return (
+    <div style={{ borderTop:'1px solid #F0EEE9', padding:16 }}>
+      <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:14 }}>
+        <div>
+          <div style={{ fontSize:13, fontWeight:600, color:'#111' }}>AI model poses</div>
+          <div style={{ fontSize:12, color:'#888', marginTop:2 }}>
+            Powered by Fashn.ai · ~$0.07 per set · Takes 30–120 seconds
+          </div>
+        </div>
+        <button
+          style={{ ...s.btn('primary'), opacity: generating ? .6 : 1 }}
+          onClick={generateAll}
+          disabled={generating}
+        >
+          {generating ? <><Spinner size={13} color="#fff"/> Generating all poses…</> : '✦ Generate all poses'}
+        </button>
+      </div>
+
+      <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:10 }}>
+        {POSE_LABELS.map(p => (
+          <div key={p.key} style={{ borderRadius:10, overflow:'hidden', border:'1px solid #E8E6E2', background:'#FAFAFA', position:'relative' }}>
+            {poses[p.key] ? (
+              <>
+                <img src={poses[p.key]} alt={p.label} style={{ width:'100%', aspectRatio:'3/4', objectFit:'cover', display:'block' }}/>
+                <div style={{ position:'absolute', bottom:0, left:0, right:0, padding:'6px 8px', background:'linear-gradient(to top,rgba(0,0,0,.6),transparent)', display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+                  <span style={{ fontSize:10, color:'#fff', fontWeight:500 }}>{p.label}</span>
+                  <button onClick={()=>generateOne(p.key)} disabled={genKey===p.key}
+                    style={{ fontSize:9, padding:'2px 6px', background:'rgba(255,255,255,.2)', border:'none', borderRadius:4, color:'#fff', cursor:'pointer', fontFamily:'inherit' }}>
+                    {genKey===p.key ? '…' : 'Redo'}
+                  </button>
+                </div>
+              </>
+            ) : (
+              <div style={{ aspectRatio:'3/4', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:6, padding:8 }}>
+                {genKey===p.key || generating ? (
+                  <>
+                    <Spinner size={20} color="#F4622A"/>
+                    <div style={{ fontSize:10, color:'#aaa', textAlign:'center' }}>Generating…<br/>30-120s</div>
+                  </>
+                ) : (
+                  <>
+                    <div style={{ fontSize:24, opacity:.3 }}>{p.icon}</div>
+                    <div style={{ fontSize:10, color:'#bbb', textAlign:'center' }}>{p.label}</div>
+                    <button onClick={()=>generateOne(p.key)}
+                      style={{ fontSize:10, padding:'4px 8px', background:'#F4622A', border:'none', borderRadius:5, color:'#fff', cursor:'pointer', fontFamily:'inherit', marginTop:2 }}>
+                      Generate
+                    </button>
+                  </>
+                )}
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+
+      {hasPoses && (
+        <div style={{ marginTop:10, fontSize:12, color:'#888', display:'flex', alignItems:'center', gap:6 }}>
+          <span style={{ width:7, height:7, borderRadius:'50%', background:'#0D6B3A', display:'inline-block' }}/>
+          Poses are visible on the portfolio website
+        </div>
+      )}
     </div>
   )
 }
