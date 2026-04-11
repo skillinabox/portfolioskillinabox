@@ -2,6 +2,7 @@ import { createContext, useContext, useState, useCallback } from 'react'
 
 // ── SIB Logo ──────────────────────────────────────────────────
 export function SIBLogo({ dark = true }) {
+  console.log('SIBLogo', dark)
   const textColor = dark ? '#fff' : '#111'
   const tagColor  = dark ? '#666' : '#999'
   return (
