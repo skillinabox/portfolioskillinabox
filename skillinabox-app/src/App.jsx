@@ -33,15 +33,18 @@ function AuthProvider({ children }) {
     return () => subscription.unsubscribe()
   }, [])
 
-  async function loadProfile(userId) {
+async function loadProfile(userId) {
     setLoading(true)
-    const { data: prof } = await supabase.from('profiles').select('*').eq('id', userId).single()
-    setProfile(prof)
-    if (prof?.role === 'learner') {
-      const { data: lrn } = await supabase.from('learners').select('*').eq('profile_id', userId).single()
-      setLearner(lrn)
-    }
-    setLoading(false)
+    try {
+      const { data: prof, error } = await supabase.from('profiles').select('*').eq('id', userId).single()
+      if (error) { console.error('Profile error:', error); setLoading(false); return; }
+      setProfile(prof)
+      if (prof?.role === 'learner') {
+        const { data: lrn } = await supabase.from('learners').select('*').eq('profile_id', userId).single()
+        setLearner(lrn)
+      }
+    } catch(e) { console.error(e) }
+    finally { setLoading(false) }
   }
 
   async function signOut() {
