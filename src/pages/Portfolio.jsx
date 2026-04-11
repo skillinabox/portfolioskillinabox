@@ -218,6 +218,18 @@ export default function Portfolio() {
                         <span style={{ fontSize:11, color:'#888', background:'#F0EDEA', padding:'4px 12px', borderRadius:99 }}>{g.availability||'Made to order'}</span>
                       </div>
                       {g.occasion&&<div style={{ fontSize:12, color:'#bbb', marginTop:8 }}>For: {g.occasion}</div>}
+                      {g.poses && Object.values(g.poses).some(Boolean) && (
+                        <div style={{ marginTop:12, paddingTop:12, borderTop:'1px solid #F0EEE9' }}>
+                          <div style={{ fontSize:11, color:'#aaa', marginBottom:6 }}>Model views</div>
+                          <div style={{ display:'flex', gap:5 }}>
+                            {['front','side','walking','sitting'].filter(k=>g.poses[k]).map(k=>(
+                              <div key={k} style={{ flex:1, borderRadius:7, overflow:'hidden', aspectRatio:'3/4' }}>
+                                <img src={g.poses[k]} alt={k} style={{ width:'100%', height:'100%', objectFit:'cover', display:'block' }}/>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </div>
                 ))}
