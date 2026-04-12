@@ -28,9 +28,12 @@ export default function Login() {
         setInfo('Account created! You can now sign in.')
         setSignup(false)
       } else {
-        const { error } = await supabase.auth.signInWithPassword({ email, password: pass })
+        const { data, error } = await supabase.auth.signInWithPassword({ email, password: pass })
         if (error) throw error
-        // Navigation handled by auth state change in App.jsx
+        // Hard redirect based on mode — works more reliably than React Router
+        const dest = mode === 'admin' ? '/admin' : '/dashboard'
+        window.location.replace(dest)
+        return // prevent finally block from re-enabling button
       }
     } catch(e) {
       setErr(e.message || 'Something went wrong')
