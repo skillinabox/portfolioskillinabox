@@ -20,6 +20,8 @@ export default function Login() {
       localStorage.removeItem('snb_kicked')
     }
   }, [])
+
+  async function handleAuth(e) {
     e.preventDefault()
     setErr(''); setInfo(''); setLoading(true)
     try {
