@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
 import { SIBLogo, Spinner } from '../components/ui'
 
@@ -12,7 +12,14 @@ export default function Login() {
   const [info, setInfo]     = useState('')
   const [loading, setLoading] = useState(false)
 
-  async function handleAuth(e) {
+  // Show message if kicked due to concurrent login
+  const kickedMsg = localStorage.getItem('snb_kicked')
+  useEffect(() => {
+    if (kickedMsg) {
+      setErr(kickedMsg)
+      localStorage.removeItem('snb_kicked')
+    }
+  }, [])
     e.preventDefault()
     setErr(''); setInfo(''); setLoading(true)
     try {
@@ -30,10 +37,14 @@ export default function Login() {
       } else {
         const { data, error } = await supabase.auth.signInWithPassword({ email, password: pass })
         if (error) throw error
-        // Hard redirect based on mode — works more reliably than React Router
+        // Write unique session token — invalidates any other active session
+        const sessionToken = crypto.randomUUID()
+        await supabase.from('profiles').update({ session_token: sessionToken }).eq('id', data.user.id)
+        localStorage.setItem('snb_session_token', sessionToken)
+        // Hard redirect
         const dest = mode === 'admin' ? '/admin' : '/dashboard'
         window.location.replace(dest)
-        return // prevent finally block from re-enabling button
+        return
       }
     } catch(e) {
       setErr(e.message || 'Something went wrong')
