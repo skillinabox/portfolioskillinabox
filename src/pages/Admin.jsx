@@ -974,14 +974,6 @@ function PoseSection({ garment, onUpdate, toast }) {
     </div>
   )
 }
-              {isDone ? (
-                <>
-                  <img src={poses[p.key]} alt={p.label} style={{ width:'100%', aspectRatio:'3/4', objectFit:'cover', display:'block' }}/>
-                  <div style={{ position:'absolute', bottom:0, left:0, right:0, padding:'6px 8px', background:'linear-gradient(to top,rgba(0,0,0,.65),transparent)', display:'flex', alignItems:'center', justifyContent:'space-between' }}>
-                    <span style={{ fontSize:10, color:'#fff', fontWeight:500 }}>{p.label}</span>
-                    <button onClick={()=>handleGenerate(p.key)} disabled={submitting||isPending}
-                      style={{ fontSize:9, padding:'2px 6px', background:'rgba(255,255,255,.2)', border:'none', borderRadius:4, color:'#fff', cursor:'pointer', fontFamily:'inherit' }}>
-                      {isPending?'…':'Redo'}
 // ── Password Manager ──────────────────────────────────────────
 function PasswordManager({ learner, toast }) {
   const [tempPass,   setTempPass]   = useState(null)
