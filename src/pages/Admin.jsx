@@ -756,6 +756,8 @@ function PoseSection({ garment, onUpdate, toast }) {
   const [tryonImg,      setTryonImg]      = useState(null) // base64
   const [tryonResult,   setTryonResult]   = useState(null)
   const [tryonLoading,  setTryonLoading]  = useState(false)
+  const [customPoseKey, setCustomPoseKey] = useState('')
+  const [customPoses,   setCustomPoses]   = useState([]) // user-added pose keys
   const tryonRef = useRef()
   const pollRef  = useRef(null)
 
@@ -764,10 +766,13 @@ function PoseSection({ garment, onUpdate, toast }) {
   const hasPending   = Object.keys(pendingPoses).length > 0
   const hasPoses     = Object.values(poses).some(Boolean)
 
+  // Restart polling on every mount and whenever pending_poses changes
   useEffect(() => {
+    clearInterval(pollRef.current)
     if (Object.keys(pendingPoses).length > 0) startPolling(pendingPoses)
     return () => clearInterval(pollRef.current)
-  }, [garment.id])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [garment.id, JSON.stringify(pendingPoses)])
 
   function startPolling(ids) {
     clearInterval(pollRef.current)
@@ -875,7 +880,7 @@ function PoseSection({ garment, onUpdate, toast }) {
 
         {/* Pose selector grid */}
         <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:8, marginBottom:14 }}>
-          {POSE_LABELS.map(p => {
+          {[...POSE_LABELS, ...customPoses].map(p => {
             const isPending = p.key in pendingPoses
             const isDone    = !!poses[p.key]
             const isSel     = selPoses.includes(p.key)
@@ -895,18 +900,56 @@ function PoseSection({ garment, onUpdate, toast }) {
                   </>
                 ) : (
                   <div style={{ aspectRatio:'3/4', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:4 }}>
-                    {isPending ? <><Spinner size={18} color="#F4622A"/><div style={{ fontSize:9, color:'#aaa', textAlign:'center' }}>Generating…</div></>
-                      : <>
-                          <div style={{ fontSize:20, opacity:.3 }}>{p.icon}</div>
-                          <div style={{ fontSize:9, color:'#bbb', textAlign:'center' }}>{p.label}</div>
-                          <div style={{ fontSize:9, color: isSel?'#F4622A':'#ccc', fontWeight:isSel?600:400 }}>{isSel?'✓ Selected':'tap to select'}</div>
-                        </>}
+                    {isPending ? (
+                      <><Spinner size={18} color="#F4622A"/><div style={{ fontSize:9, color:'#aaa', textAlign:'center' }}>Generating…</div></>
+                    ) : (
+                      <>
+                        <div style={{ fontSize:20, opacity:.3 }}>{p.icon||'📷'}</div>
+                        <div style={{ fontSize:9, color:'#bbb', textAlign:'center' }}>{p.label}</div>
+                        <button onClick={e=>{e.stopPropagation();handleGenerate(p.key)}} disabled={submitting||hasPending}
+                          style={{ marginTop:4, fontSize:9, padding:'3px 8px', background:'#F4622A', border:'none', borderRadius:4, color:'#fff', cursor:'pointer', fontFamily:'inherit', opacity:submitting||hasPending?.5:1 }}>
+                          Generate
+                        </button>
+                      </>
+                    )}
                   </div>
                 )}
               </div>
             )
           })}
         </div>
+
+        {/* Add custom pose */}
+        <div style={{ display:'flex', gap:6, alignItems:'center', marginBottom:10 }}>
+          <input
+            value={customPoseKey}
+            onChange={e=>setCustomPoseKey(e.target.value)}
+            placeholder="Add pose (e.g. closeup-face)"
+            style={{ flex:1, fontSize:11, padding:'5px 10px', borderRadius:6, border:'1px solid #E2E0DC', fontFamily:'inherit', outline:'none' }}
+            onKeyDown={e=>{
+              if (e.key==='Enter' && customPoseKey.trim()) {
+                const key = customPoseKey.trim().toLowerCase().replace(/\s+/g,'-')
+                if (![...POSE_LABELS,...customPoses].find(p=>p.key===key)) {
+                  setCustomPoses(prev=>[...prev,{key,label:customPoseKey.trim(),icon:'📷'}])
+                }
+                setCustomPoseKey('')
+              }
+            }}
+          />
+          <button
+            onClick={()=>{
+              const key = customPoseKey.trim().toLowerCase().replace(/\s+/g,'-')
+              if (!key) return
+              if (![...POSE_LABELS,...customPoses].find(p=>p.key===key)) {
+                setCustomPoses(prev=>[...prev,{key,label:customPoseKey.trim(),icon:'📷'}])
+              }
+              setCustomPoseKey('')
+            }}
+            style={{ fontSize:11, padding:'5px 10px', borderRadius:6, border:'1px solid #E2E0DC', background:'#fff', cursor:'pointer', fontFamily:'inherit', whiteSpace:'nowrap' }}>
+            + Add pose
+          </button>
+        </div>
+
         {hasPoses && !hasPending && (
           <div style={{ fontSize:12, color:'#888', display:'flex', alignItems:'center', gap:6 }}>
             <span style={{ width:7, height:7, borderRadius:'50%', background:'#0D6B3A', display:'inline-block' }}/>
