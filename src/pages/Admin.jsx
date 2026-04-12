@@ -47,7 +47,12 @@ export default function Admin() {
   const selEnquiry = enquiries.find(e => e.id === selEnqId)
 
   useEffect(() => { loadLearners() }, [])
-  useEffect(() => { if (selLid) { loadAll(selLid); localStorage.setItem('snb_selLid', selLid) } }, [selLid])
+  useEffect(() => {
+    if (selLid) {
+      loadAll(selLid)
+      localStorage.setItem('snb_selLid', selLid)
+    }
+  }, [selLid])
   useEffect(() => { localStorage.setItem('snb_tab', tab) }, [tab])
 
   async function loadLearners() {
@@ -738,66 +743,78 @@ function FieldRow({ label, value, onChange, ai }) {
 
 // ── Pose Generation Section ───────────────────────────────────
 const POSE_LABELS = [
-  { key:'front',   label:'Front',    icon:'👗' },
-  { key:'back',    label:'Back',     icon:'🔄' },
-  { key:'left',    label:'3/4 Left', icon:'↖'  },
-  { key:'right',   label:'3/4 Right',icon:'↗'  },
-  { key:'walking', label:'Walking',  icon:'🚶' },
-  { key:'sitting', label:'Sitting',  icon:'🪑' },
-  { key:'closeup', label:'Close-up', icon:'🔍' },
-  { key:'outdoor', label:'Outdoor',  icon:'🌿' },
+  { key:'front',   label:'Front',     icon:'👗' },
+  { key:'back',    label:'Back',      icon:'🔄' },
+  { key:'left',    label:'3/4 Left',  icon:'↖'  },
+  { key:'right',   label:'3/4 Right', icon:'↗'  },
+  { key:'walking', label:'Walking',   icon:'🚶' },
+  { key:'sitting', label:'Sitting',   icon:'🪑' },
+  { key:'closeup', label:'Close-up',  icon:'🔍' },
+  { key:'outdoor', label:'Outdoor',   icon:'🌿' },
 ]
-const POLL_INTERVAL = 6000
 
 function PoseSection({ garment, onUpdate, toast }) {
-  const [submitting,    setSubmitting]    = useState(false)
-  const [selPoses,      setSelPoses]      = useState(['front','back','walking','sitting'])
-  const [poseTab,       setPoseTab]       = useState('generate') // 'generate' | 'tryon'
-  const [tryonImg,      setTryonImg]      = useState(null) // base64
-  const [tryonResult,   setTryonResult]   = useState(null)
-  const [tryonLoading,  setTryonLoading]  = useState(false)
-  const [customPoseKey, setCustomPoseKey] = useState('')
-  const [customPoses,   setCustomPoses]   = useState([]) // user-added pose keys
-  const tryonRef = useRef()
-  const pollRef  = useRef(null)
+  const [submitting,   setSubmitting]  = useState(false)
+  const [selPoses,     setSelPoses]    = useState(['front','back','walking','sitting'])
+  const [poseTab,      setPoseTab]     = useState('generate')
+  const [tryonImg,     setTryonImg]    = useState(null)
+  const [tryonResult,  setTryonResult] = useState(null)
+  const [tryonLoading, setTryonLoading]= useState(false)
+  const tryonRef   = useRef()
+  const pollRef    = useRef(null)
+  const pollCount  = useRef(0)
+  const MAX_POLLS  = 60 // 6s × 60 = 6 minutes max
 
   const poses        = garment.poses        || {}
   const pendingPoses = garment.pending_poses || {}
   const hasPending   = Object.keys(pendingPoses).length > 0
   const hasPoses     = Object.values(poses).some(Boolean)
 
-  // Restart polling on every mount and whenever pending_poses changes
+  // Resume polling on mount only if there are pending poses
   useEffect(() => {
-    clearInterval(pollRef.current)
-    if (Object.keys(pendingPoses).length > 0) startPolling(pendingPoses)
+    if (Object.keys(pendingPoses).length > 0) {
+      pollCount.current = 0
+      startPolling()
+    }
     return () => clearInterval(pollRef.current)
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [garment.id, JSON.stringify(pendingPoses)])
+  }, [garment.id]) // only re-run if garment changes, not on every render
 
-  function startPolling(ids) {
+  function startPolling() {
     clearInterval(pollRef.current)
-    pollRef.current = setInterval(() => pollPoses(ids), POLL_INTERVAL)
-  }
-
-  async function pollPoses(ids) {
-    if (!ids || Object.keys(ids).length === 0) { clearInterval(pollRef.current); return }
-    try {
-      const res = await fetch('/api/check-poses', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prediction_ids: ids }),
-      })
-      const data = await res.json()
-      if (Object.keys(data.results||{}).length > 0) {
-        await onUpdate('poses', { ...poses, ...data.results })
-      }
-      if (!data.still_pending || Object.keys(data.still_pending).length === 0) {
+    pollRef.current = setInterval(async () => {
+      pollCount.current++
+      if (pollCount.current > MAX_POLLS) {
         clearInterval(pollRef.current)
-        await onUpdate('pending_poses', {})
-        if (Object.keys(data.results||{}).length > 0) toast('All poses ready ✓', 'success')
-      } else {
-        await onUpdate('pending_poses', data.still_pending)
+        toast('Pose generation timed out — click Clear to reset', 'error')
+        return
       }
-    } catch(e) { console.error('Poll error:', e) }
+      // Read latest pending_poses fresh from Supabase to avoid stale closure
+      const { data: fresh } = await supabase.from('garments').select('poses,pending_poses').eq('id', garment.id).single()
+      const pending = fresh?.pending_poses || {}
+      if (Object.keys(pending).length === 0) { clearInterval(pollRef.current); return }
+
+      try {
+        const res = await fetch('/api/check-poses', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ prediction_ids: pending }),
+        })
+        const data = await res.json()
+        const completed = data.results || {}
+        const stillPending = data.still_pending || {}
+
+        if (Object.keys(completed).length > 0) {
+          const merged = { ...(fresh?.poses||{}), ...completed }
+          await onUpdate('poses', merged)
+        }
+        if (Object.keys(stillPending).length === 0) {
+          clearInterval(pollRef.current)
+          await onUpdate('pending_poses', {})
+          if (Object.keys(completed).length > 0) toast('All poses ready ✓', 'success')
+        } else {
+          await onUpdate('pending_poses', stillPending)
+        }
+      } catch(e) { console.error('Poll error:', e) }
+    }, 6000)
   }
 
   function togglePose(key) {
@@ -816,12 +833,18 @@ function PoseSection({ garment, onUpdate, toast }) {
       })
       const data = await res.json()
       if (data.error) throw new Error(data.error)
-      const newPending = { ...pendingPoses, ...data.prediction_ids }
-      await onUpdate('pending_poses', newPending)
-      startPolling(newPending)
-      toast(`Generating ${keys.length} pose${keys.length!==1?'s':''}  — safe to switch screens ✓`, 'default')
+      await onUpdate('pending_poses', { ...pendingPoses, ...data.prediction_ids })
+      pollCount.current = 0
+      startPolling()
+      toast(`Submitted ${keys.length} pose${keys.length!==1?'s':''} — safe to switch screens ✓`, 'default')
     } catch(err) { toast(err.message||'Failed', 'error') }
     setSubmitting(false)
+  }
+
+  async function clearStuck() {
+    clearInterval(pollRef.current)
+    await onUpdate('pending_poses', {})
+    toast('Cleared — you can now regenerate', 'success')
   }
 
   async function handleTryonUpload(file) {
@@ -852,66 +875,67 @@ function PoseSection({ garment, onUpdate, toast }) {
   return (
     <div style={{ borderTop:'1px solid #F0EEE9', padding:16 }}>
       {/* Tab switcher */}
-      <div style={{ display:'flex', gap:0, marginBottom:16, background:'#F7F6F4', borderRadius:9, padding:3, width:'fit-content' }}>
+      <div style={{ display:'flex', gap:0, marginBottom:14, background:'#F7F6F4', borderRadius:9, padding:3, width:'fit-content' }}>
         {[['generate','✦ LIA poses'],['tryon','👗 Try on me']].map(([t,l])=>(
           <button key={t} onClick={()=>setPoseTab(t)}
-            style={{ padding:'6px 16px', fontSize:12, fontWeight:500, borderRadius:7, border:'none', cursor:'pointer', fontFamily:'inherit', background:poseTab===t?'#fff':'transparent', color:poseTab===t?'#111':'#888', boxShadow:poseTab===t?'0 1px 4px rgba(0,0,0,.1)':'none' }}>
+            style={{ padding:'6px 16px', fontSize:12, fontWeight:500, borderRadius:7, border:'none', cursor:'pointer', fontFamily:'inherit', background:poseTab===t?'#fff':'transparent', color:poseTab===t?'#111':'#888', boxShadow:poseTab===t?'0 1px 4px rgba(0,0,0,.08)':'none' }}>
             {l}
           </button>
         ))}
       </div>
 
-      {poseTab === 'generate' && <>
-        <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', marginBottom:12, gap:12, flexWrap:'wrap' }}>
+      {poseTab==='generate' && <>
+        <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', marginBottom:12, gap:10, flexWrap:'wrap' }}>
           <div>
             <div style={{ fontSize:13, fontWeight:600, color:'#111' }}>LIA model poses</div>
-            <div style={{ fontSize:12, color:'#888', marginTop:2 }}>{garment.gender==='male'?'Male':'Female'} model · Select poses to generate</div>
-            {hasPending && <div style={{ fontSize:11, color:'#F4622A', marginTop:4, display:'flex', alignItems:'center', gap:5 }}><Spinner size={11} color="#F4622A"/> Generating — safe to switch screens</div>}
+            <div style={{ fontSize:12, color:'#888', marginTop:2 }}>{(garment.gender||'female')==='male'?'Male':'Female'} model · tap poses to select, then generate</div>
+            {hasPending && (
+              <div style={{ fontSize:11, color:'#F4622A', marginTop:4, display:'flex', alignItems:'center', gap:8 }}>
+                <Spinner size={11} color="#F4622A"/> Generating — safe to switch screens
+                <button onClick={clearStuck} style={{ fontSize:10, color:'#888', background:'none', border:'1px solid #E2E0DC', borderRadius:5, padding:'2px 8px', cursor:'pointer', fontFamily:'inherit' }}>Clear stuck</button>
+              </div>
+            )}
           </div>
-          <div style={{ display:'flex', gap:7, flexWrap:'wrap' }}>
-            <button onClick={()=>setSelPoses(POSE_LABELS.map(p=>p.key))} style={{ fontSize:11, padding:'4px 10px', borderRadius:6, border:'1px solid #E2E0DC', background:'#fff', cursor:'pointer', fontFamily:'inherit' }}>All 8</button>
-            <button onClick={()=>setSelPoses([])} style={{ fontSize:11, padding:'4px 10px', borderRadius:6, border:'1px solid #E2E0DC', background:'#fff', cursor:'pointer', fontFamily:'inherit' }}>None</button>
-            <button onClick={()=>handleGenerate(null)} disabled={submitting||hasPending||!selPoses.length}
-              style={{ display:'inline-flex', alignItems:'center', gap:5, padding:'6px 14px', fontSize:12, fontWeight:500, borderRadius:8, border:'1px solid #F4622A', background:'#F4622A', color:'#fff', cursor:'pointer', fontFamily:'inherit', opacity:!selPoses.length||submitting||hasPending?.5:1 }}>
-              {submitting?<><Spinner size={12} color="#fff"/> Submitting…</>:hasPending?<><Spinner size={12} color="#fff"/> Generating…</>:`✦ Generate ${selPoses.length} pose${selPoses.length!==1?'s':''}`}
+          <div style={{ display:'flex', gap:6, flexWrap:'wrap', alignItems:'center' }}>
+            <button onClick={()=>setSelPoses(POSE_LABELS.map(p=>p.key))} style={{ fontSize:11, padding:'5px 10px', borderRadius:6, border:'1px solid #E2E0DC', background:'#fff', cursor:'pointer', fontFamily:'inherit' }}>All 8</button>
+            <button onClick={()=>setSelPoses([])} style={{ fontSize:11, padding:'5px 10px', borderRadius:6, border:'1px solid #E2E0DC', background:'#fff', cursor:'pointer', fontFamily:'inherit' }}>None</button>
+            <button onClick={()=>handleGenerate(null)} disabled={submitting||!selPoses.length}
+              style={{ display:'inline-flex', alignItems:'center', gap:5, padding:'7px 14px', fontSize:12, fontWeight:600, borderRadius:8, border:'none', background: selPoses.length?'#F4622A':'#ccc', color:'#fff', cursor:selPoses.length?'pointer':'not-allowed', fontFamily:'inherit' }}>
+              {submitting?<><Spinner size={12} color="#fff"/> Submitting…</>:`✦ Generate ${selPoses.length}`}
             </button>
           </div>
         </div>
 
-        {/* Pose selector grid */}
-        <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:8, marginBottom:14 }}>
-          {[...POSE_LABELS, ...customPoses].map(p => {
+        {/* 8-pose grid */}
+        <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:8 }}>
+          {POSE_LABELS.map(p => {
             const isPending = p.key in pendingPoses
             const isDone    = !!poses[p.key]
             const isSel     = selPoses.includes(p.key)
             return (
-              <div key={p.key} style={{ borderRadius:10, overflow:'hidden', border:`2px solid ${isSel&&!isDone?'#F4622A':isDone?'#E8E6E2':'#F0EEE9'}`, background:isSel&&!isDone?'#FEF8F6':'#FAFAFA', position:'relative', cursor:'pointer' }}
-                onClick={()=>!isDone&&!isPending&&togglePose(p.key)}>
+              <div key={p.key}
+                style={{ borderRadius:10, overflow:'hidden', border:`2px solid ${isDone?'#E8E6E2':isSel?'#F4622A':'#F0EEE9'}`, background:isSel&&!isDone?'#FEF8F6':'#FAFAFA', position:'relative', cursor: isDone||isPending?'default':'pointer' }}
+                onClick={()=>{ if(!isDone&&!isPending) togglePose(p.key) }}>
                 {isDone ? (
                   <>
                     <img src={poses[p.key]} alt={p.label} style={{ width:'100%', aspectRatio:'3/4', objectFit:'cover', display:'block' }}/>
                     <div style={{ position:'absolute', bottom:0, left:0, right:0, padding:'5px 7px', background:'linear-gradient(to top,rgba(0,0,0,.65),transparent)', display:'flex', alignItems:'center', justifyContent:'space-between' }}>
                       <span style={{ fontSize:10, color:'#fff', fontWeight:500 }}>{p.label}</span>
                       <button onClick={e=>{e.stopPropagation();handleGenerate(p.key)}} disabled={submitting||isPending}
-                        style={{ fontSize:9, padding:'2px 6px', background:'rgba(255,255,255,.2)', border:'none', borderRadius:4, color:'#fff', cursor:'pointer', fontFamily:'inherit' }}>
+                        style={{ fontSize:9, padding:'2px 7px', background:'rgba(255,255,255,.25)', border:'none', borderRadius:4, color:'#fff', cursor:'pointer', fontFamily:'inherit' }}>
                         {isPending?'…':'Redo'}
                       </button>
                     </div>
                   </>
                 ) : (
-                  <div style={{ aspectRatio:'3/4', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:4 }}>
-                    {isPending ? (
-                      <><Spinner size={18} color="#F4622A"/><div style={{ fontSize:9, color:'#aaa', textAlign:'center' }}>Generating…</div></>
-                    ) : (
-                      <>
-                        <div style={{ fontSize:20, opacity:.3 }}>{p.icon||'📷'}</div>
-                        <div style={{ fontSize:9, color:'#bbb', textAlign:'center' }}>{p.label}</div>
-                        <button onClick={e=>{e.stopPropagation();handleGenerate(p.key)}} disabled={submitting||hasPending}
-                          style={{ marginTop:4, fontSize:9, padding:'3px 8px', background:'#F4622A', border:'none', borderRadius:4, color:'#fff', cursor:'pointer', fontFamily:'inherit', opacity:submitting||hasPending?.5:1 }}>
-                          Generate
-                        </button>
-                      </>
-                    )}
+                  <div style={{ aspectRatio:'3/4', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:5, padding:6 }}>
+                    {isPending
+                      ? <><Spinner size={18} color="#F4622A"/><div style={{ fontSize:9, color:'#aaa', textAlign:'center', lineHeight:1.4 }}>Generating…<br/>safe to switch</div></>
+                      : <>
+                          <div style={{ fontSize:20, opacity:.3 }}>{p.icon}</div>
+                          <div style={{ fontSize:9, color:'#bbb', textAlign:'center', lineHeight:1.3 }}>{p.label}</div>
+                          <div style={{ fontSize:9, fontWeight:600, color:isSel?'#F4622A':'#ccc' }}>{isSel?'✓ Selected':'tap to select'}</div>
+                        </>}
                   </div>
                 )}
               </div>
@@ -919,97 +943,53 @@ function PoseSection({ garment, onUpdate, toast }) {
           })}
         </div>
 
-        {/* Add custom pose */}
-        <div style={{ display:'flex', gap:6, alignItems:'center', marginBottom:10 }}>
-          <input
-            value={customPoseKey}
-            onChange={e=>setCustomPoseKey(e.target.value)}
-            placeholder="Add pose (e.g. closeup-face)"
-            style={{ flex:1, fontSize:11, padding:'5px 10px', borderRadius:6, border:'1px solid #E2E0DC', fontFamily:'inherit', outline:'none' }}
-            onKeyDown={e=>{
-              if (e.key==='Enter' && customPoseKey.trim()) {
-                const key = customPoseKey.trim().toLowerCase().replace(/\s+/g,'-')
-                if (![...POSE_LABELS,...customPoses].find(p=>p.key===key)) {
-                  setCustomPoses(prev=>[...prev,{key,label:customPoseKey.trim(),icon:'📷'}])
-                }
-                setCustomPoseKey('')
-              }
-            }}
-          />
-          <button
-            onClick={()=>{
-              const key = customPoseKey.trim().toLowerCase().replace(/\s+/g,'-')
-              if (!key) return
-              if (![...POSE_LABELS,...customPoses].find(p=>p.key===key)) {
-                setCustomPoses(prev=>[...prev,{key,label:customPoseKey.trim(),icon:'📷'}])
-              }
-              setCustomPoseKey('')
-            }}
-            style={{ fontSize:11, padding:'5px 10px', borderRadius:6, border:'1px solid #E2E0DC', background:'#fff', cursor:'pointer', fontFamily:'inherit', whiteSpace:'nowrap' }}>
-            + Add pose
-          </button>
-        </div>
-
         {hasPoses && !hasPending && (
-          <div style={{ fontSize:12, color:'#888', display:'flex', alignItems:'center', gap:6 }}>
+          <div style={{ marginTop:10, fontSize:12, color:'#888', display:'flex', alignItems:'center', gap:6 }}>
             <span style={{ width:7, height:7, borderRadius:'50%', background:'#0D6B3A', display:'inline-block' }}/>
             Poses visible on portfolio website
           </div>
         )}
       </>}
 
-      {poseTab === 'tryon' && (
+      {poseTab==='tryon' && (
         <div>
           <div style={{ fontSize:13, fontWeight:600, color:'#111', marginBottom:4 }}>Virtual try-on</div>
-          <div style={{ fontSize:12, color:'#888', lineHeight:1.6, marginBottom:14 }}>
-            Upload a photo of the customer or learner — LIA will place this garment on them.
-          </div>
-          <div style={{ background:'#F7F6F4', borderRadius:10, padding:'12px 14px', marginBottom:14, fontSize:12, color:'#666', lineHeight:1.7 }}>
+          <div style={{ fontSize:12, color:'#888', lineHeight:1.6, marginBottom:12 }}>Upload a photo of the customer — LIA places this garment on them.</div>
+          <div style={{ background:'#F7F6F4', borderRadius:10, padding:'12px 14px', marginBottom:14, fontSize:12, color:'#666', lineHeight:1.8 }}>
             <div style={{ fontWeight:600, marginBottom:4, color:'#111' }}>📸 Photo guidelines for best results</div>
-            <div>✓ Full body or at least waist-up shot</div>
-            <div>✓ Plain or simple background</div>
-            <div>✓ Facing forward, standing straight</div>
-            <div>✓ Good lighting, no heavy shadows</div>
-            <div>✗ Avoid busy patterns in clothing</div>
+            <div>✓ Full body or at least waist-up &nbsp; ✓ Plain background &nbsp; ✓ Facing forward</div>
+            <div>✓ Good even lighting &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; ✗ Avoid busy patterned clothing</div>
           </div>
-
           <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12, marginBottom:14 }}>
-            {/* Photo upload */}
             <div>
               <div style={{ fontSize:11, color:'#aaa', marginBottom:6 }}>Person photo</div>
               <div onClick={()=>tryonRef.current?.click()}
                 style={{ border:`2px dashed ${tryonImg?'#F4622A':'#E2E0DC'}`, borderRadius:10, aspectRatio:'3/4', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:6, cursor:'pointer', overflow:'hidden', background:'#FAFAFA' }}>
                 {tryonImg
                   ? <img src={tryonImg} alt="person" style={{ width:'100%', height:'100%', objectFit:'cover' }}/>
-                  : <>
-                      <div style={{ fontSize:24, opacity:.3 }}>👤</div>
-                      <div style={{ fontSize:11, color:'#bbb', textAlign:'center' }}>Upload photo</div>
-                    </>}
+                  : <><div style={{ fontSize:24, opacity:.25 }}>👤</div><div style={{ fontSize:11, color:'#bbb' }}>Click to upload</div></>}
               </div>
-              <input ref={tryonRef} type="file" accept="image/*" style={{ display:'none' }} onChange={e=>{if(e.target.files[0])handleTryonUpload(e.target.files[0]);e.target.value=''}}/>
+              <input ref={tryonRef} type="file" accept="image/jpeg,image/png,image/webp" style={{ display:'none' }} onChange={e=>{if(e.target.files[0])handleTryonUpload(e.target.files[0]);e.target.value=''}}/>
+              {tryonImg && <button onClick={()=>{setTryonImg(null);setTryonResult(null)}} style={{ marginTop:6, fontSize:11, color:'#aaa', background:'none', border:'none', cursor:'pointer', fontFamily:'inherit' }}>Remove photo</button>}
             </div>
-            {/* Result */}
             <div>
               <div style={{ fontSize:11, color:'#aaa', marginBottom:6 }}>Try-on result</div>
               <div style={{ border:'1px solid #E2E0DC', borderRadius:10, aspectRatio:'3/4', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:6, overflow:'hidden', background:'#FAFAFA' }}>
                 {tryonResult
-                  ? <img src={tryonResult} alt="try-on result" style={{ width:'100%', height:'100%', objectFit:'cover' }}/>
+                  ? <img src={tryonResult} alt="try-on" style={{ width:'100%', height:'100%', objectFit:'cover' }}/>
                   : tryonLoading
-                    ? <><Spinner size={24} color="#F4622A"/><div style={{ fontSize:11, color:'#aaa', textAlign:'center' }}>Generating…<br/>30-120 seconds</div></>
-                    : <><div style={{ fontSize:24, opacity:.2 }}>✦</div><div style={{ fontSize:11, color:'#ccc', textAlign:'center' }}>Result appears here</div></>}
+                    ? <><Spinner size={24} color="#F4622A"/><div style={{ fontSize:11, color:'#aaa', textAlign:'center', lineHeight:1.5 }}>Generating…<br/>30–120 seconds</div></>
+                    : <><div style={{ fontSize:24, opacity:.15 }}>✦</div><div style={{ fontSize:11, color:'#ccc' }}>Result appears here</div></>}
               </div>
             </div>
           </div>
-
           <div style={{ display:'flex', gap:8 }}>
             <button onClick={handleTryon} disabled={!tryonImg||tryonLoading}
-              style={{ flex:1, display:'inline-flex', alignItems:'center', justifyContent:'center', gap:6, padding:'10px', fontSize:13, fontWeight:600, borderRadius:10, border:'none', background:'#F4622A', color:'#fff', cursor:'pointer', fontFamily:'inherit', opacity:!tryonImg||tryonLoading?.5:1 }}>
+              style={{ flex:1, display:'inline-flex', alignItems:'center', justifyContent:'center', gap:6, padding:'10px', fontSize:13, fontWeight:600, borderRadius:10, border:'none', background:tryonImg&&!tryonLoading?'#F4622A':'#ccc', color:'#fff', cursor:tryonImg&&!tryonLoading?'pointer':'not-allowed', fontFamily:'inherit' }}>
               {tryonLoading?<><Spinner size={14} color="#fff"/> Generating try-on…</>:'✦ Generate try-on'}
             </button>
             {tryonResult && (
-              <a href={tryonResult} download="try-on-result.png" style={{ padding:'10px 16px', fontSize:12, fontWeight:500, borderRadius:10, border:'1px solid #E2E0DC', background:'#fff', color:'#333', textDecoration:'none', display:'inline-flex', alignItems:'center' }}>
-                ↓ Download
-              </a>
+              <a href={tryonResult} download="tryon.png" style={{ padding:'10px 16px', fontSize:12, fontWeight:500, borderRadius:10, border:'1px solid #E2E0DC', background:'#fff', color:'#333', textDecoration:'none', display:'inline-flex', alignItems:'center' }}>↓ Save</a>
             )}
           </div>
         </div>
@@ -1017,6 +997,7 @@ function PoseSection({ garment, onUpdate, toast }) {
     </div>
   )
 }
+
 // ── Password Manager ──────────────────────────────────────────
 function PasswordManager({ learner, toast }) {
   const [tempPass,   setTempPass]   = useState(null)

@@ -26,12 +26,12 @@ function AuthProvider({ children }) {
       else setLoading(false)
     })
 
-    // Listen for changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      // Ignore token refreshes and initial session — only act on explicit sign in/out
+      if (event === 'TOKEN_REFRESHED' || event === 'INITIAL_SESSION') return
       const u = session?.user ?? null
       setUser(u)
-      if (u) loadProfile(u.id)
-      else { setProfile(null); setLearner(null); setLoading(false) }
+      if (event === 'SIGNED_OUT') { setProfile(null); setLearner(null); setLoading(false) }
     })
     return () => subscription.unsubscribe()
   }, [])
