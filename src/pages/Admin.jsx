@@ -526,6 +526,8 @@ export default function Admin() {
                 <div style={{ padding:'0 18px 16px', fontSize:11, color:'#aaa' }}>
                   Learner sign-up link: <strong>{window.location.origin}/login</strong>
                 </div>
+                <PasswordManager learner={learner} toast={toast}/>
+                <DeleteLearner learner={learner} toast={toast} onDeleted={()=>{ setSelLid(null); loadLearners() }}/>
               </div>
             )}
 
@@ -857,6 +859,154 @@ function PoseSection({ garment, onUpdate, toast }) {
           Poses visible on portfolio website
         </div>
       )}
+    </div>
+  )
+}
+
+// ── Password Manager ──────────────────────────────────────────
+function PasswordManager({ learner, toast }) {
+  const [tempPass,   setTempPass]   = useState(null)
+  const [sending,    setSending]    = useState(false)
+  const [generating, setGenerating] = useState(false)
+  const [copied,     setCopied]     = useState(false)
+
+  function makeTempPassword() {
+    const chars = 'ABCDEFGHJKMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789'
+    const special = '@#!'
+    let pass = ''
+    for (let i = 0; i < 6; i++) pass += chars[Math.floor(Math.random() * chars.length)]
+    pass += special[Math.floor(Math.random() * special.length)]
+    pass += Math.floor(Math.random() * 90 + 10)
+    return pass.split('').sort(() => Math.random() - .5).join('')
+  }
+
+  async function handleSendReset() {
+    setSending(true)
+    const { error } = await supabase.auth.resetPasswordForEmail(learner.email, {
+      redirectTo: `${window.location.origin}/login`
+    })
+    setSending(false)
+    if (error) toast(error.message, 'error')
+    else toast(`Password reset email sent to ${learner.email} ✓`, 'success')
+  }
+
+  async function handleGenTemp() {
+    setGenerating(true)
+    const pass = makeTempPassword()
+    // Update password via Supabase admin (uses service role via our API)
+    const res = await fetch('/api/set-temp-password', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: learner.email, password: pass }),
+    })
+    const data = await res.json()
+    setGenerating(false)
+    if (data.error) { toast(data.error, 'error'); return }
+    setTempPass(pass)
+    toast('Temporary password set ✓', 'success')
+  }
+
+  async function copyPass() {
+    await navigator.clipboard.writeText(tempPass)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
+
+  const s = { display:'inline-flex', alignItems:'center', gap:5, padding:'7px 14px', fontSize:12, fontWeight:500, borderRadius:8, border:'1px solid', cursor:'pointer', fontFamily:'inherit' }
+
+  return (
+    <div style={{ margin:'0 18px 16px', padding:'14px', background:'#F7F6F4', borderRadius:10 }}>
+      <div style={{ fontSize:12, fontWeight:600, color:'#111', marginBottom:10 }}>Password management</div>
+      <div style={{ display:'flex', gap:8, flexWrap:'wrap', marginBottom: tempPass ? 12 : 0 }}>
+        <button onClick={handleSendReset} disabled={sending}
+          style={{ ...s, background:'#fff', borderColor:'#E2E0DC', color:'#333' }}>
+          {sending ? <><Spinner size={12} color="#555"/> Sending…</> : '✉ Send reset email'}
+        </button>
+        <button onClick={handleGenTemp} disabled={generating}
+          style={{ ...s, background:'#F4622A', borderColor:'#F4622A', color:'#fff' }}>
+          {generating ? <><Spinner size={12} color="#fff"/> Generating…</> : '⚡ Generate temp password'}
+        </button>
+      </div>
+
+      {tempPass && (
+        <div style={{ marginTop:10, padding:'10px 14px', background:'#fff', border:'1px solid #E2E0DC', borderRadius:8 }}>
+          <div style={{ fontSize:11, color:'#888', marginBottom:6 }}>
+            Temp password for <strong>{learner.name}</strong> — share via WhatsApp or call. Ask them to change it after login.
+          </div>
+          <div style={{ display:'flex', alignItems:'center', gap:10 }}>
+            <code style={{ fontSize:18, fontWeight:700, color:'#111', letterSpacing:'.1em', fontFamily:'monospace', flex:1 }}>{tempPass}</code>
+            <button onClick={copyPass} style={{ ...s, background: copied?'#E6F4EC':'#fff', borderColor: copied?'#52B27A':'#E2E0DC', color: copied?'#0D6B3A':'#555', padding:'5px 12px' }}>
+              {copied ? '✓ Copied' : 'Copy'}
+            </button>
+            <a href={`https://wa.me/${learner.phone?.replace(/\D/g,'')}?text=${encodeURIComponent(`Hi ${learner.name.split(' ')[0]}, your Skillinabox portfolio login:\nEmail: ${learner.email}\nTemp password: ${tempPass}\n\nPlease change your password after logging in at ${window.location.origin}/login`)}`}
+              target="_blank" rel="noreferrer"
+              style={{ ...s, textDecoration:'none', background:'#E6F4EC', borderColor:'#52B27A', color:'#0D6B3A' }}>
+              WhatsApp
+            </a>
+          </div>
+          <div style={{ marginTop:8, fontSize:11, color:'#F4622A' }}>⚠ This password is shown once — save it now</div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── Delete Learner ────────────────────────────────────────────
+function DeleteLearner({ learner, toast, onDeleted }) {
+  const [confirm, setConfirm] = useState(false)
+  const [deleting, setDeleting] = useState(false)
+  const [typed, setTyped] = useState('')
+
+  async function handleDelete() {
+    if (typed !== learner.name) { toast('Name does not match', 'error'); return }
+    setDeleting(true)
+    try {
+      const res = await fetch('/api/delete-learner', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ learner_id: learner.id, learner_email: learner.email }),
+      })
+      const data = await res.json()
+      if (data.error) throw new Error(data.error)
+      toast(`${learner.name} and all their data deleted`, 'success')
+      onDeleted()
+    } catch(err) {
+      toast(err.message || 'Delete failed', 'error')
+      setDeleting(false)
+    }
+  }
+
+  const s = { display:'inline-flex', alignItems:'center', gap:5, padding:'7px 14px', fontSize:12, fontWeight:500, borderRadius:8, border:'1px solid', cursor:'pointer', fontFamily:'inherit' }
+
+  if (!confirm) return (
+    <div style={{ margin:'0 18px 18px', borderTop:'1px solid #FEE2E2', paddingTop:14 }}>
+      <button onClick={()=>setConfirm(true)}
+        style={{ ...s, background:'transparent', borderColor:'#FCA5A5', color:'#991B1B', fontSize:12 }}>
+        ✕ Delete learner & all data
+      </button>
+    </div>
+  )
+
+  return (
+    <div style={{ margin:'0 18px 18px', background:'#FEF2F2', border:'1px solid #FCA5A5', borderRadius:10, padding:'14px 16px' }}>
+      <div style={{ fontSize:13, fontWeight:600, color:'#991B1B', marginBottom:6 }}>Delete {learner.name}?</div>
+      <div style={{ fontSize:12, color:'#B91C1C', lineHeight:1.6, marginBottom:12 }}>
+        This permanently deletes all garments, photos, collections, enquiries, subscriptions and their login account. <strong>This cannot be undone.</strong>
+      </div>
+      <div style={{ marginBottom:10 }}>
+        <label style={{ fontSize:11, color:'#991B1B', display:'block', marginBottom:5 }}>
+          Type <strong>{learner.name}</strong> to confirm
+        </label>
+        <input value={typed} onChange={e=>setTyped(e.target.value)} placeholder={learner.name}
+          style={{ width:'100%', fontSize:13, padding:'8px 10px', border:'1px solid #FCA5A5', borderRadius:8, outline:'none', fontFamily:'inherit', background:'#fff' }}/>
+      </div>
+      <div style={{ display:'flex', gap:8 }}>
+        <button onClick={()=>{ setConfirm(false); setTyped('') }} style={{ ...s, background:'#fff', borderColor:'#E2E0DC', color:'#555' }}>Cancel</button>
+        <button onClick={handleDelete} disabled={deleting || typed !== learner.name}
+          style={{ ...s, background: typed===learner.name?'#DC2626':'#FCA5A5', borderColor:'transparent', color:'#fff', opacity: typed!==learner.name?.6:1 }}>
+          {deleting ? <><Spinner size={12} color="#fff"/> Deleting…</> : 'Yes, delete everything'}
+        </button>
+      </div>
     </div>
   )
 }

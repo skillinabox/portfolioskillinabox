@@ -28,9 +28,10 @@ export default function Login() {
         setInfo('Account created! You can now sign in.')
         setSignup(false)
       } else {
-        const { error } = await supabase.auth.signInWithPassword({ email, password: pass })
+        const { data, error } = await supabase.auth.signInWithPassword({ email, password: pass })
         if (error) throw error
-        // Navigation handled by auth state change in App.jsx
+        const { data: prof } = await supabase.from('profiles').select('role').eq('id', data.user.id).single()
+        window.location.href = prof?.role === 'admin' ? '/admin' : '/dashboard'
       }
     } catch(e) {
       setErr(e.message || 'Something went wrong')
