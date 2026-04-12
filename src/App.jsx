@@ -56,6 +56,8 @@ function AuthProvider({ children }) {
     const interval = setInterval(check, 30000) // then every 30s
     return () => clearInterval(interval)
   }, [user])
+
+  async function loadProfile(userId) {
     setLoading(true)
     try {
       // Try to get profile
