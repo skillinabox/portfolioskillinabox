@@ -34,6 +34,7 @@ export default function Learner() {
   const [editForm,     setEditForm]     = useState({})
   const [activeSub,    setActiveSub]    = useState(null)
   const [usage,        setUsage]        = useState({ garments_used:0, poses_used:0 })
+  const [showUpgrade,  setShowUpgrade]  = useState(false)
   const [showUpgrade,  setShowUpgrade]  = useState(null) // { feature, used, limit }
 
   const fileRef  = useRef()
@@ -440,41 +441,8 @@ export default function Learner() {
                       </div>
                     </div>
 
-                    {/* LIA Poses — shown for all, locked if no subscription */}
-                    <div style={{ borderTop:'1px solid #F0EEE9', padding:16, position:'relative' }}>
-                      <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:14 }}>
-                        <div>
-                          <div style={{ fontSize:13, fontWeight:600 }}>LIA model poses</div>
-                          <div style={{ fontSize:12, color:'#888', marginTop:2 }}>{hasAccess ? `${(garment.gender||'female')==='male'?'Male':'Female'} model · LIA powered` : 'Subscribe to generate model photos'}</div>
-                        </div>
-                        {hasAccess
-                          ? <button onClick={()=>handleGenGarmentPoses(garment)} style={{ ...btn('primary'), fontSize:12 }}>✦ Generate all poses</button>
-                          : <button onClick={()=>setTab('subscription')} style={{ ...btn(), fontSize:12, borderColor:'#F4622A', color:'#F4622A' }}>🔒 Unlock poses →</button>}
-                      </div>
-                      <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:10, filter: !hasAccess ? 'blur(2px)' : 'none', pointerEvents: !hasAccess ? 'none' : 'auto' }}>
-                        {[['front','Front','👗'],['side','Side','↔'],['walking','Walking','🚶'],['sitting','Sitting','🪑']].map(([key,label,icon])=>{
-                          const poseUrl = garment.poses?.[key]
-                          const isPending = garment.pending_poses && key in garment.pending_poses
-                          return (
-                            <div key={key} style={{ borderRadius:10, overflow:'hidden', border:'1px solid #E8E6E2', background:'#FAFAFA', position:'relative' }}>
-                              {poseUrl ? (
-                                <>
-                                  <img src={poseUrl} alt={label} style={{ width:'100%', aspectRatio:'3/4', objectFit:'cover', display:'block' }}/>
-                                  <div style={{ position:'absolute', bottom:0, left:0, right:0, padding:'5px 7px', background:'linear-gradient(to top,rgba(0,0,0,.6),transparent)' }}>
-                                    <span style={{ fontSize:10, color:'#fff', fontWeight:500 }}>{label}</span>
-                                  </div>
-                                </>
-                              ) : (
-                                <div style={{ aspectRatio:'3/4', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:4 }}>
-                                  {isPending ? <><Spinner size={18} color="#F4622A"/><div style={{ fontSize:10, color:'#aaa' }}>Generating…</div></>
-                                    : <><div style={{ fontSize:20, opacity:.25 }}>{icon}</div><div style={{ fontSize:10, color:'#bbb' }}>{label}</div></>}
-                                </div>
-                              )}
-                            </div>
-                          )
-                        })}
-                      </div>
-                    </div>
+                    {/* LIA Poses — full version matching admin */}
+                    <LearnerPoseSection garment={garment} hasAccess={hasAccess} onUpdate={updateGarment} onUpgrade={()=>setTab('subscription')} toast={toast}/>
                   </>
                 )}
               </div>
@@ -877,6 +845,205 @@ function UpgradeModal({ feature, used, limit, onClose, onUpgrade }) {
           </button>
         </div>
       </div>
+    </div>
+  )
+}
+
+// ── Learner Pose Section ──────────────────────────────────────
+const LEARNER_POSE_LABELS = [
+  { key:'front',   label:'Front',     icon:'👗' },
+  { key:'back',    label:'Back',      icon:'🔄' },
+  { key:'left',    label:'3/4 Left',  icon:'↖'  },
+  { key:'right',   label:'3/4 Right', icon:'↗'  },
+  { key:'walking', label:'Walking',   icon:'🚶' },
+  { key:'sitting', label:'Sitting',   icon:'🪑' },
+  { key:'closeup', label:'Close-up',  icon:'🔍' },
+  { key:'outdoor', label:'Outdoor',   icon:'🌿' },
+]
+
+function LearnerPoseSection({ garment, hasAccess, onUpdate, onUpgrade, toast }) {
+  const [selPoses,     setSelPoses]    = useState(['front','back','walking','sitting'])
+  const [poseTab,      setPoseTab]     = useState('generate')
+  const [submitting,   setSubmitting]  = useState(false)
+  const [tryonImg,     setTryonImg]    = useState(null)
+  const [tryonResult,  setTryonResult] = useState(null)
+  const [tryonLoading, setTryonLoading]= useState(false)
+  const tryonRef  = useRef()
+  const pollRef   = useRef(null)
+  const pollCount = useRef(0)
+
+  const poses        = garment.poses        || {}
+  const pendingPoses = garment.pending_poses || {}
+  const hasPending   = Object.keys(pendingPoses).length > 0
+
+  useEffect(() => {
+    if (Object.keys(pendingPoses).length > 0) { pollCount.current = 0; startPolling() }
+    return () => clearInterval(pollRef.current)
+  }, [garment.id])
+
+  function startPolling() {
+    clearInterval(pollRef.current)
+    pollRef.current = setInterval(async () => {
+      pollCount.current++
+      if (pollCount.current > 60) { clearInterval(pollRef.current); return }
+      const { data: fresh } = await supabase.from('garments').select('poses,pending_poses').eq('id', garment.id).single()
+      const pending = fresh?.pending_poses || {}
+      if (!Object.keys(pending).length) { clearInterval(pollRef.current); return }
+      try {
+        const res = await fetch('/api/check-poses', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ prediction_ids: pending }) })
+        const data = await res.json()
+        if (Object.keys(data.results||{}).length > 0) await onUpdate(garment.id, { poses: { ...(fresh?.poses||{}), ...data.results } })
+        if (!Object.keys(data.still_pending||{}).length) { clearInterval(pollRef.current); await onUpdate(garment.id, { pending_poses: {} }); toast('Poses ready ✓', 'success') }
+        else await onUpdate(garment.id, { pending_poses: data.still_pending })
+      } catch(e) { console.error('Poll:', e) }
+    }, 6000)
+  }
+
+  async function handleGenerate(poseKey) {
+    if (!hasAccess) { onUpgrade(); return }
+    const keys = poseKey ? [poseKey] : selPoses
+    if (!keys.length) { toast('Select at least one pose', 'error'); return }
+    setSubmitting(true)
+    try {
+      const res = await fetch('/api/submit-poses', { method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ garment_image_url: garment.image_url, gender: garment.gender||'female', pose_keys: keys }) })
+      const data = await res.json()
+      if (data.error) throw new Error(data.error)
+      await onUpdate(garment.id, { pending_poses: { ...pendingPoses, ...data.prediction_ids } })
+      pollCount.current = 0; startPolling()
+      toast(`Generating ${keys.length} pose${keys.length!==1?'s':''} — safe to switch screens ✓`, 'default')
+    } catch(err) { toast(err.message||'Failed', 'error') }
+    setSubmitting(false)
+  }
+
+  async function handleTryon() {
+    if (!hasAccess) { onUpgrade(); return }
+    if (!tryonImg) { toast('Upload a photo first', 'error'); return }
+    setTryonLoading(true)
+    try {
+      const base64 = tryonImg.split(',')[1]
+      const res = await fetch('/api/try-on', { method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ model_image_base64: base64, garment_image_url: garment.image_url }) })
+      const data = await res.json()
+      if (data.error) throw new Error(data.error)
+      setTryonResult(data.result_url)
+      toast('Try-on complete ✓', 'success')
+    } catch(err) { toast(err.message||'Failed', 'error') }
+    setTryonLoading(false)
+  }
+
+  if (!garment.image_url) return null
+
+  return (
+    <div style={{ borderTop:'1px solid #F0EEE9', padding:16 }}>
+      {/* Tab switcher */}
+      <div style={{ display:'flex', gap:0, marginBottom:14, background:'#F7F6F4', borderRadius:9, padding:3, width:'fit-content' }}>
+        {[['generate','✦ LIA poses'],['tryon','👗 Try on me']].map(([t,l])=>(
+          <button key={t} onClick={()=>setPoseTab(t)}
+            style={{ padding:'6px 16px', fontSize:12, fontWeight:500, borderRadius:7, border:'none', cursor:'pointer', fontFamily:'inherit', background:poseTab===t?'#fff':'transparent', color:poseTab===t?'#111':'#888', boxShadow:poseTab===t?'0 1px 4px rgba(0,0,0,.08)':'none' }}>
+            {l}
+          </button>
+        ))}
+      </div>
+
+      {poseTab==='generate' && <>
+        <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', marginBottom:12, gap:10, flexWrap:'wrap' }}>
+          <div>
+            <div style={{ fontSize:13, fontWeight:600 }}>LIA model poses</div>
+            <div style={{ fontSize:12, color:'#888', marginTop:2 }}>
+              {hasAccess ? `${(garment.gender||'female')==='male'?'Male':'Female'} model · tap to select, then generate` : 'Subscribe to generate model photos'}
+            </div>
+            {hasPending && <div style={{ fontSize:11, color:'#F4622A', marginTop:4, display:'flex', alignItems:'center', gap:5 }}><Spinner size={11} color="#F4622A"/> Generating — safe to switch screens</div>}
+          </div>
+          {hasAccess ? (
+            <div style={{ display:'flex', gap:6, flexWrap:'wrap' }}>
+              <button onClick={()=>setSelPoses(LEARNER_POSE_LABELS.map(p=>p.key))} style={{ fontSize:11, padding:'5px 10px', borderRadius:6, border:'1px solid #E2E0DC', background:'#fff', cursor:'pointer', fontFamily:'inherit' }}>All 8</button>
+              <button onClick={()=>setSelPoses([])} style={{ fontSize:11, padding:'5px 10px', borderRadius:6, border:'1px solid #E2E0DC', background:'#fff', cursor:'pointer', fontFamily:'inherit' }}>None</button>
+              <button onClick={()=>handleGenerate(null)} disabled={submitting||!selPoses.length}
+                style={{ display:'inline-flex', alignItems:'center', gap:5, padding:'7px 14px', fontSize:12, fontWeight:600, borderRadius:8, border:'none', background:selPoses.length?'#F4622A':'#ccc', color:'#fff', cursor:selPoses.length?'pointer':'not-allowed', fontFamily:'inherit' }}>
+                {submitting?<><Spinner size={12} color="#fff"/> Submitting…</>:`✦ Generate ${selPoses.length}`}
+              </button>
+            </div>
+          ) : (
+            <button onClick={onUpgrade} style={{ fontSize:12, padding:'7px 14px', borderRadius:8, border:'1px solid #F4622A', background:'transparent', color:'#F4622A', cursor:'pointer', fontFamily:'inherit', fontWeight:500 }}>🔒 Unlock poses →</button>
+          )}
+        </div>
+
+        <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:8, filter:!hasAccess?'blur(3px)':'none', pointerEvents:!hasAccess?'none':'auto' }}>
+          {LEARNER_POSE_LABELS.map(p => {
+            const isDone    = !!poses[p.key]
+            const isPending = p.key in pendingPoses
+            const isSel     = selPoses.includes(p.key)
+            return (
+              <div key={p.key}
+                style={{ borderRadius:10, overflow:'hidden', border:`2px solid ${isDone?'#E8E6E2':isSel?'#F4622A':'#F0EEE9'}`, background:isSel&&!isDone?'#FEF8F6':'#FAFAFA', cursor:isDone||isPending?'default':'pointer' }}
+                onClick={()=>{ if(!isDone&&!isPending) setSelPoses(prev => prev.includes(p.key) ? prev.filter(k=>k!==p.key) : [...prev, p.key]) }}>
+                {isDone ? (
+                  <>
+                    <img src={poses[p.key]} alt={p.label} style={{ width:'100%', aspectRatio:'3/4', objectFit:'cover', display:'block' }}/>
+                    <div style={{ position:'absolute', bottom:0, left:0, right:0, padding:'5px 7px', background:'linear-gradient(to top,rgba(0,0,0,.65),transparent)', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+                      <span style={{ fontSize:10, color:'#fff', fontWeight:500 }}>{p.label}</span>
+                      <button onClick={e=>{e.stopPropagation();handleGenerate(p.key)}} style={{ fontSize:9, padding:'2px 7px', background:'rgba(255,255,255,.25)', border:'none', borderRadius:4, color:'#fff', cursor:'pointer', fontFamily:'inherit' }}>Redo</button>
+                    </div>
+                  </>
+                ) : (
+                  <div style={{ aspectRatio:'3/4', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:5, padding:6, position:'relative' }}>
+                    {isPending ? <><Spinner size={18} color="#F4622A"/><div style={{ fontSize:9, color:'#aaa', textAlign:'center', lineHeight:1.4 }}>Generating…</div></>
+                      : <>
+                          <div style={{ fontSize:20, opacity:.3 }}>{p.icon}</div>
+                          <div style={{ fontSize:9, color:'#bbb' }}>{p.label}</div>
+                          <div style={{ fontSize:9, fontWeight:600, color:isSel?'#F4622A':'#ccc' }}>{isSel?'✓ Selected':'tap to select'}</div>
+                        </>}
+                  </div>
+                )}
+              </div>
+            )
+          })}
+        </div>
+      </>}
+
+      {poseTab==='tryon' && (
+        <div>
+          <div style={{ fontSize:13, fontWeight:600, marginBottom:4 }}>Virtual try-on</div>
+          <div style={{ fontSize:12, color:'#888', lineHeight:1.6, marginBottom:10 }}>Upload your photo — LIA places this garment on you.</div>
+          <div style={{ background:'#FEF0EA', border:'1px solid #F4622A44', borderRadius:8, padding:'8px 12px', marginBottom:12, fontSize:12, color:'#C94E1E', fontWeight:500 }}>
+            ⚠ Must be a full body photo (head to toe) for the complete garment to show
+          </div>
+          <div style={{ fontSize:12, color:'#666', background:'#F7F6F4', borderRadius:8, padding:'8px 12px', marginBottom:12, lineHeight:1.7 }}>
+            ✓ Full body head-to-toe &nbsp; ✓ Plain background &nbsp; ✓ Facing forward &nbsp; ✓ Good lighting
+          </div>
+          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12, marginBottom:12, filter:!hasAccess?'blur(3px)':'none', pointerEvents:!hasAccess?'none':'auto' }}>
+            <div>
+              <div style={{ fontSize:11, color:'#aaa', marginBottom:5 }}>Your photo</div>
+              <div onClick={()=>hasAccess&&tryonRef.current?.click()}
+                style={{ border:`2px dashed ${tryonImg?'#F4622A':'#E2E0DC'}`, borderRadius:10, aspectRatio:'3/4', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:6, cursor:hasAccess?'pointer':'default', overflow:'hidden', background:'#FAFAFA' }}>
+                {tryonImg ? <img src={tryonImg} alt="you" style={{ width:'100%', height:'100%', objectFit:'cover' }}/> : <><div style={{ fontSize:24, opacity:.25 }}>👤</div><div style={{ fontSize:11, color:'#bbb' }}>Click to upload</div></>}
+              </div>
+              <input ref={tryonRef} type="file" accept="image/*" style={{ display:'none' }} onChange={e=>{if(e.target.files[0]){const r=new FileReader();r.onload=ev=>setTryonImg(ev.target.result);r.readAsDataURL(e.target.files[0])};e.target.value=''}}/>
+              {tryonImg && <button onClick={()=>{setTryonImg(null);setTryonResult(null)}} style={{ marginTop:5, fontSize:11, color:'#aaa', background:'none', border:'none', cursor:'pointer', fontFamily:'inherit' }}>Remove</button>}
+            </div>
+            <div>
+              <div style={{ fontSize:11, color:'#aaa', marginBottom:5 }}>Try-on result</div>
+              <div style={{ border:'1px solid #E2E0DC', borderRadius:10, aspectRatio:'3/4', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:6, overflow:'hidden', background:'#FAFAFA' }}>
+                {tryonResult ? <img src={tryonResult} alt="result" style={{ width:'100%', height:'100%', objectFit:'cover' }}/>
+                  : tryonLoading ? <><Spinner size={22} color="#F4622A"/><div style={{ fontSize:11, color:'#aaa', textAlign:'center', lineHeight:1.5 }}>Generating…<br/>30–120s</div></>
+                  : <><div style={{ fontSize:22, opacity:.15 }}>✦</div><div style={{ fontSize:11, color:'#ccc' }}>Result here</div></>}
+              </div>
+            </div>
+          </div>
+          {!hasAccess ? (
+            <button onClick={onUpgrade} style={{ width:'100%', padding:'11px', fontSize:13, fontWeight:600, background:'#F4622A', border:'none', borderRadius:10, color:'#fff', cursor:'pointer', fontFamily:'inherit' }}>🔒 Subscribe to use try-on →</button>
+          ) : (
+            <div style={{ display:'flex', gap:8 }}>
+              <button onClick={handleTryon} disabled={!tryonImg||tryonLoading}
+                style={{ flex:1, display:'inline-flex', alignItems:'center', justifyContent:'center', gap:6, padding:'10px', fontSize:13, fontWeight:600, borderRadius:10, border:'none', background:tryonImg&&!tryonLoading?'#F4622A':'#ccc', color:'#fff', cursor:tryonImg&&!tryonLoading?'pointer':'not-allowed', fontFamily:'inherit' }}>
+                {tryonLoading?<><Spinner size={14} color="#fff"/> Generating…</>:'✦ Try it on me'}
+              </button>
+              {tryonResult && <a href={tryonResult} download="tryon.png" style={{ padding:'10px 16px', fontSize:12, fontWeight:500, borderRadius:10, border:'1px solid #E2E0DC', background:'#fff', color:'#333', textDecoration:'none', display:'inline-flex', alignItems:'center' }}>↓ Save</a>}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   )
 }
