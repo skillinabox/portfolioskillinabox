@@ -124,6 +124,7 @@ export default function App() {
             <Route path="/admin"           element={<Protected role="admin"><Admin /></Protected>} />
             <Route path="/dashboard"       element={<Protected role="learner"><Learner /></Protected>} />
             <Route path="/portfolio/:slug" element={<Portfolio />} />
+            <Route path="/portfolio/preview/:learnerId" element={<Portfolio />} />
             <Route path="*"               element={<AutoRedirect />} />
           </Routes>
         </ToastProvider>

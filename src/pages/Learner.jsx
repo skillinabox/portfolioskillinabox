@@ -1,7 +1,9 @@
 import { useState, useEffect, useRef } from 'react'
 import { supabase, uploadGarmentImage, uploadProfileImage, tagGarment, generateCollectionDesc, generateGarmentDesc, fileToBase64 } from '../lib/supabase'
+import { checkExpiry, canPerform, incrementUsage, getUsage, getActiveSubscription, getPlans } from '../lib/subscription'
 import { useAuth } from '../App'
 import { SIBLogo, Avatar, StatusBadge, GarmentThumb, Empty, Spinner, Modal, useToast } from '../components/ui'
+import SubscriptionPage from './Subscription'
 
 const SEASONS = ['Any','Spring','Summer','Monsoon','Festive','Winter','Bridal']
 
@@ -30,6 +32,10 @@ export default function Learner() {
   const [genningDesc,  setGenningDesc]  = useState(false)
   const [editingGid,   setEditingGid]   = useState(null)
   const [editForm,     setEditForm]     = useState({})
+  const [activeSub,    setActiveSub]    = useState(null)
+  const [usage,        setUsage]        = useState({ garments_used:0, poses_used:0 })
+  const [showUpgrade,  setShowUpgrade]  = useState(false)
+  const [showUpgrade,  setShowUpgrade]  = useState(null) // { feature, used, limit }
 
   const fileRef  = useRef()
   const photoRef = useRef()
@@ -39,8 +45,17 @@ export default function Learner() {
   const selEnquiry = enquiries.find(e => e.id === selEnqId)
   const unread     = enquiries.filter(e => !e.read).length
 
+  const subStatus = learner?.subscription_status || 'none'
+  const hasAccess = ['active','trial'].includes(subStatus) && learner?.subscription_end && new Date(learner.subscription_end) > new Date()
+
   useEffect(() => {
-    if (authLearner?.id) { loadAll(authLearner.id); setLearner(authLearner) }
+    if (authLearner?.id) {
+      loadAll(authLearner.id)
+      setLearner(authLearner)
+      checkExpiry(authLearner.id)
+      getActiveSubscription(authLearner.id).then(setActiveSub)
+      getUsage(authLearner.id).then(setUsage)
+    }
     else setLoading(false)
   }, [authLearner])
 
@@ -76,19 +91,43 @@ export default function Learner() {
 
   async function handleUpload(file) {
     if (!file || !learner) return
-    const { data:g, error } = await supabase.from('garments').insert({ learner_id: learner.id, status: 'uploading', name: file.name.replace(/\.[^.]+$/, '') }).select().single()
+
+    // Always allow upload — but gate LIA tagging on subscription
+    const access = await canPerform(learner.id, 'upload_garment')
+    const liaLocked = !access.allowed
+
+    // If limit reached, show upgrade modal
+    if (!access.allowed && access.reason === 'garment_limit_reached') {
+      setShowUpgrade({ feature: 'garments', used: access.used, limit: access.limit }); return
+    }
+
+    // Save garment (always allowed)
+    const { data:g, error } = await supabase.from('garments').insert({
+      learner_id: learner.id, status: 'uploading', name: file.name.replace(/\.[^.]+$/, '')
+    }).select().single()
     if (error) { toast('Upload failed', 'error'); return }
     mutG(gs => [...gs, g]); setSelGid(g.id)
+
+    // Upload image (always)
     try {
       const imageUrl = await uploadGarmentImage(learner.id, g.id, file)
-      mutG(gs => gs.map(x => x.id === g.id ? { ...x, image_url: imageUrl, status: 'tagging' } : x))
-      await supabase.from('garments').update({ image_url: imageUrl, status: 'tagging' }).eq('id', g.id)
+      mutG(gs => gs.map(x => x.id === g.id ? { ...x, image_url: imageUrl, status: liaLocked ? 'uploaded' : 'tagging' } : x))
+      await supabase.from('garments').update({ image_url: imageUrl, status: liaLocked ? 'uploaded' : 'tagging' }).eq('id', g.id)
+
+      if (liaLocked) {
+        // Garment saved but LIA locked — show upgrade prompt
+        toast('Garment uploaded! Subscribe to unlock LIA tagging & poses.', 'default')
+        return
+      }
+
+      // LIA tagging (subscription active)
+      await incrementUsage(learner.id, 'garments')
       const base64 = await fileToBase64(file)
       const tags = await tagGarment(base64, file.type)
       const updates = { ...tags, name: tags.name || file.name.replace(/\.[^.]+$/, ''), status: 'tagged', ai_tagged: true }
       await supabase.from('garments').update(updates).eq('id', g.id)
       mutG(gs => gs.map(x => x.id === g.id ? { ...x, ...updates } : x))
-      toast('Garment tagged ✓', 'success')
+      toast('LIA tagged ✓', 'success')
     } catch {
       await supabase.from('garments').update({ status: 'tagged' }).eq('id', g.id)
       mutG(gs => gs.map(x => x.id === g.id ? { ...x, status: 'tagged' } : x))
@@ -121,6 +160,26 @@ export default function Learner() {
       await updateCollection(col.id, { description: desc })
       toast('Description generated ✓', 'success')
     } catch { toast('Failed', 'error') }
+  }
+
+  async function handleGenGarmentPoses(g) {
+    const access = await canPerform(learner.id, 'generate_pose')
+    if (!access.allowed) {
+      if (access.reason === 'pose_limit_reached') {
+        setShowUpgrade({ feature: 'poses', used: access.used, limit: access.limit }); return
+      }
+      setTab('subscription'); return
+    }
+    try {
+      const res = await fetch('/api/submit-poses', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ garment_image_url: g.image_url, gender: g.gender || 'female' }),
+      })
+      const data = await res.json()
+      if (data.error) throw new Error(data.error)
+      await updateGarment(g.id, { pending_poses: data.prediction_ids })
+      toast('Generating poses — safe to switch screens ✓', 'default')
+    } catch(err) { toast(err.message || 'Failed', 'error') }
   }
 
   async function addCollection(form) {
@@ -198,6 +257,12 @@ export default function Learner() {
             <div>
               <div style={{ fontSize:14, fontWeight:600, color:'#fff' }}>{learner.name}</div>
               <div style={{ fontSize:12, color:'#555' }}>{learner.brand||'No brand set'}</div>
+              <div style={{ marginTop:4 }}>
+                {subStatus==='active' && <span style={{ fontSize:10, padding:'2px 8px', borderRadius:99, background:'#E6F4EC', color:'#0D6B3A', fontWeight:500 }}>✓ {activeSub?.subscription_plans?.name||'Active'}</span>}
+                {subStatus==='trial' && <span style={{ fontSize:10, padding:'2px 8px', borderRadius:99, background:'#FEF3E2', color:'#92400E', fontWeight:500 }}>🎁 Free trial</span>}
+                {subStatus==='expired' && <button onClick={()=>setShowUpgrade(true)} style={{ fontSize:10, padding:'2px 8px', borderRadius:99, background:'#FEE2E2', color:'#991B1B', fontWeight:500, border:'none', cursor:'pointer', fontFamily:'inherit' }}>⚠ Renew</button>}
+                {subStatus==='none' && <button onClick={()=>setShowUpgrade(true)} style={{ fontSize:10, padding:'2px 8px', borderRadius:99, background:'#FEF0EA', color:'#C94E1E', fontWeight:500, border:'none', cursor:'pointer', fontFamily:'inherit' }}>Subscribe →</button>}
+              </div>
             </div>
           </div>
 
@@ -223,14 +288,16 @@ export default function Learner() {
         {[['garments','My garments',`${garments.length} pieces`],
           ['collections','Collections',`${collections.length} created`],
           ['enquiries','Enquiries',`${unread} unread`],
-          ['website','My website',learner.status==='published'?'Live ✓':'Awaiting publish']].map(([id,label,sub])=>(
+          ['website','My website',learner.status==='published'?'Live ✓':'Awaiting publish'],
+          ['subscription','Subscription', hasAccess ? (activeSub?.status==='trial'?'Free trial':'Active ✓') : subStatus==='expired'?'⚠ Expired':'Not subscribed']].map(([id,label,sub])=>(
           <div key={id} onClick={()=>setTab(id)}
-            style={{ padding:'12px 14px', cursor:'pointer', borderBottom:'1px solid #1A1A1A', borderLeft:`3px solid ${tab===id?'#F4622A':'transparent'}`, background:tab===id?'#1A1A1A':'transparent', display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+            style={{ padding:'12px 14px', cursor:'pointer', borderBottom:'1px solid #1A1A1A', borderLeft:`3px solid ${tab===id?'#F4622A':id==='subscription'&&!hasAccess?'#F4622A44':'transparent'}`, background:tab===id?'#1A1A1A':id==='subscription'&&!hasAccess?'rgba(244,98,42,.05)':'transparent', display:'flex', alignItems:'center', justifyContent:'space-between' }}>
             <div>
-              <div style={{ fontSize:13, fontWeight:500, color:'#ddd' }}>{label}</div>
-              <div style={{ fontSize:11, color:'#555', marginTop:1 }}>{sub}</div>
+              <div style={{ fontSize:13, fontWeight:500, color: id==='subscription'&&!hasAccess?'#F4622A':'#ddd' }}>{label}</div>
+              <div style={{ fontSize:11, color: id==='subscription'&&subStatus==='expired'?'#C94E1E':id==='subscription'&&!hasAccess?'#F4622A88':'#555', marginTop:1 }}>{sub}</div>
             </div>
             {id==='enquiries'&&unread>0&&<span style={{ fontSize:11, padding:'1px 7px', borderRadius:99, background:'rgba(244,98,42,.2)', color:'#F4622A', fontWeight:600 }}>{unread}</span>}
+            {id==='subscription'&&!hasAccess&&<span style={{ fontSize:9, padding:'2px 8px', borderRadius:99, background:'#F4622A', color:'#fff', fontWeight:600 }}>UPGRADE</span>}
           </div>
         ))}
       </aside>
@@ -241,6 +308,17 @@ export default function Learner() {
 
           {/* GARMENTS */}
           {tab==='garments' && <>
+
+            {/* Subscription status card */}
+            <SubStatusCard
+              learner={learner}
+              activeSub={activeSub}
+              usage={usage}
+              hasAccess={hasAccess}
+              subStatus={subStatus}
+              onUpgrade={()=>setShowUpgrade(true)}
+            />
+
             <div style={card}>
               <div style={chead}>
                 <div><div style={{ fontSize:13, fontWeight:600 }}>My garments</div><div style={{ fontSize:12, color:'#888', marginTop:2 }}>Upload → LIA tags & writes descriptions</div></div>
@@ -249,7 +327,18 @@ export default function Learner() {
               </div>
               {garments.length===0 ? <Empty icon="👗" title="No garments yet" action={<button style={btn('primary')} onClick={()=>fileRef.current?.click()}>Upload garment</button>}/>
                 : <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(130px,1fr))', gap:10, padding:14 }}>
-                    {garments.map((g,i)=><GarmentThumb key={g.id} garment={g} index={i} selected={selGid===g.id} onClick={()=>setSelGid(g.id)}/>)}
+                    {garments.map((g,i)=>(
+                      <div key={g.id} style={{ position:'relative' }}>
+                        <GarmentThumb garment={g} index={i} selected={selGid===g.id} onClick={()=>setSelGid(g.id)}/>
+                        {g.status==='uploaded' && (
+                          <div onClick={()=>setShowUpgrade({feature:'lia'})}
+                            style={{ position:'absolute', inset:0, background:'rgba(0,0,0,.55)', borderRadius:10, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', cursor:'pointer', gap:4 }}>
+                            <div style={{ fontSize:18 }}>🔒</div>
+                            <div style={{ fontSize:10, color:'#fff', fontWeight:600, textAlign:'center', padding:'0 8px' }}>Upgrade to tag</div>
+                          </div>
+                        )}
+                      </div>
+                    ))}
                   </div>}
             </div>
 
@@ -258,62 +347,133 @@ export default function Learner() {
                 {['uploading','tagging'].includes(garment.status) ? (
                   <div style={{ padding:'40px 20px', textAlign:'center' }}>
                     <div style={{ fontSize:28, color:'#F4622A', marginBottom:12, display:'inline-block', animation:'spin 2s linear infinite' }}>✦</div>
-                    <div style={{ fontSize:14, fontWeight:500 }}>{garment.status==='uploading'?'Uploading…':'Analysing with LIA…'}</div>
+                    <div style={{ fontSize:14, fontWeight:500 }}>{garment.status==='uploading'?'Uploading…':'LIA is reading your garment…'}</div>
                     <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
                   </div>
-                ) : editingGid===garment.id ? (
-                  <>
-                    <div style={chead}>
-                      <div style={{ fontSize:14, fontWeight:600 }}>Edit garment</div>
-                      <div style={{ display:'flex', gap:8 }}>
-                        <button style={btn()} onClick={()=>setEditingGid(null)}>Cancel</button>
-                        <button style={btn('primary')} onClick={()=>saveGarmentEdit(garment.id)}>Save</button>
-                      </div>
-                    </div>
-                    <div style={{ padding:16, display:'flex', flexDirection:'column', gap:10 }}>
-                      {/* Collection assignment */}
-                      <div>
-                        <label style={{ fontSize:11, color:'#aaa', display:'block', marginBottom:4 }}>Collection</label>
-                        <select value={editForm.collection_id??garment.collection_id??''} onChange={e=>setEditForm(p=>({...p,collection_id:e.target.value||null}))}
-                          style={{ width:'100%', fontSize:13, padding:'7px 10px', border:'1px solid #E2E0DC', borderRadius:8, fontFamily:'inherit' }}>
-                          <option value="">No collection</option>
-                          {collections.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}
-                        </select>
-                      </div>
-                      {[['Garment name','name'],['Price (₹)','price'],['Description','description'],['Availability','availability'],['Sizes','sizes']].map(([l,f])=>(
-                        <div key={f}>
-                          <label style={{ fontSize:11, color:'#aaa', display:'block', marginBottom:4 }}>{l}</label>
-                          <input value={editForm[f]??garment[f]??''} onChange={e=>setEditForm(p=>({...p,[f]:e.target.value}))}
-                            style={{ width:'100%', fontSize:13, padding:'7px 10px', border:'1px solid #E2E0DC', borderRadius:8, outline:'none', fontFamily:'inherit' }}/>
-                        </div>
-                      ))}
-                    </div>
-                  </>
                 ) : (
                   <>
                     <div style={chead}>
                       <div>
-                        <div style={{ fontSize:14, fontWeight:600 }}>{garment.name}</div>
-                        <div style={{ fontSize:12, color:'#888', marginTop:2 }}>{garment.category}{garment.fabric?` · ${garment.fabric}`:''}</div>
+                        <div style={{ fontSize:14, fontWeight:600 }}>{garment.name||'Garment details'}</div>
+                        <div style={{ fontSize:12, color:'#888', marginTop:2 }}>{garment.ai_tagged ? 'LIA auto-filled · all fields editable' : 'Fill in your garment details'}</div>
                       </div>
                       <div style={{ display:'flex', gap:8, alignItems:'center' }}>
                         <StatusBadge status={garment.status}/>
-                        <button style={btn()} onClick={()=>{ setEditingGid(garment.id); setEditForm({}) }}>Edit</button>
-                        {!garment.description&&<button style={{ ...btn(), fontSize:11 }} onClick={()=>handleGenGarmentDesc(garment)} disabled={genningDesc}>{genningDesc?<Spinner size={12} color="#F4622A"/>:'✦ LIA write'}</button>}
+                        <button style={btn()} onClick={()=>{ setEditingGid(garment.id); setEditForm({}) }}>Edit details</button>
                       </div>
                     </div>
-                    <div style={{ display:'grid', gridTemplateColumns:garment.image_url?'160px 1fr':'1fr' }}>
-                      {garment.image_url&&<div style={{ padding:14, borderRight:'1px solid #F0EEE9' }}><img src={garment.image_url} alt="" style={{ width:'100%', borderRadius:8, objectFit:'cover', aspectRatio:'3/4' }}/></div>}
-                      <div style={{ padding:16 }}>
-                        {[['Price',garment.price?`₹${Number(garment.price).toLocaleString('en-IN')}`:'Not set — tap Edit to add'],['Availability',garment.availability],['Sizes',garment.sizes],['Occasion',garment.occasion]].map(([l,v])=>v?(
-                          <div key={l} style={{ marginBottom:10 }}>
-                            <div style={{ fontSize:11, color:'#aaa' }}>{l}</div>
-                            <div style={{ fontSize:13, fontWeight:l==='Price'?600:400, color:l==='Price'&&garment.price?'#C94E1E':'#333' }}>{v}</div>
+
+                    <div style={{ display:'grid', gridTemplateColumns:garment.image_url?'180px 1fr':'1fr' }}>
+                      {garment.image_url && (
+                        <div style={{ padding:14, borderRight:'1px solid #F0EEE9' }}>
+                          <img src={garment.image_url} alt="" style={{ width:'100%', borderRadius:8, objectFit:'cover', aspectRatio:'3/4', display:'block' }}/>
+                        </div>
+                      )}
+
+                      <div style={{ padding:'14px 16px', position:'relative' }}>
+
+                        {/* Collection */}
+                        <div style={{ marginBottom:12 }}>
+                          <label style={{ fontSize:11, color:'#aaa', display:'block', marginBottom:4 }}>Collection</label>
+                          <select value={garment.collection_id||''} onChange={e=>updateGarment(garment.id,{collection_id:e.target.value||null})}
+                            style={{ width:'100%', fontSize:13, padding:'6px 10px', border:'1px solid #E2E0DC', borderRadius:8, background:'#fff', fontFamily:'inherit' }}>
+                            <option value="">No collection</option>
+                            {collections.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}
+                          </select>
+                        </div>
+
+                        {/* Gender toggle */}
+                        <div style={{ marginBottom:14 }}>
+                          <label style={{ fontSize:11, color:'#aaa', display:'block', marginBottom:6 }}>Model gender for LIA poses</label>
+                          <div style={{ display:'flex', gap:6 }}>
+                            {[['female','👩 Female'],['male','👨 Male'],['unisex','✦ Unisex']].map(([g,label])=>(
+                              <button key={g} onClick={()=>updateGarment(garment.id,{gender:g})}
+                                style={{ flex:1, padding:'7px 6px', fontSize:12, fontWeight:500, borderRadius:8, border:`1px solid ${(garment.gender||'female')===g?'#F4622A':'#E2E0DC'}`, background:(garment.gender||'female')===g?'#FEF0EA':'#fff', color:(garment.gender||'female')===g?'#C94E1E':'#888', cursor:'pointer', fontFamily:'inherit' }}>
+                                {label}
+                              </button>
+                            ))}
                           </div>
-                        ):null)}
-                        {garment.description&&<div style={{ fontSize:13, color:'#555', lineHeight:1.6, marginTop:8 }}>{garment.description}</div>}
-                        {!garment.price&&<div style={{ fontSize:12, color:'#92400E', background:'#FEF3E2', padding:'6px 12px', borderRadius:7, display:'inline-block', marginTop:8 }}>Set a price to show on your portfolio</div>}
-                        {collections.length>0&&<div style={{ fontSize:12, color:'#888', marginTop:8 }}>Collection: {collections.find(c=>c.id===garment.collection_id)?.name||'None'}</div>}
+                        </div>
+
+                        {/* LIA fields — blurred if no subscription */}
+                        <div style={{ position:'relative' }}>
+                          <div style={{ filter: !hasAccess && garment.status==='uploaded' ? 'blur(4px)' : 'none', pointerEvents: !hasAccess && garment.status==='uploaded' ? 'none' : 'auto', userSelect: !hasAccess && garment.status==='uploaded' ? 'none' : 'auto' }}>
+                            <div style={{ fontSize:11, fontWeight:600, color:'#aaa', textTransform:'uppercase', letterSpacing:'.05em', marginBottom:10 }}>LIA-detected details</div>
+                            {[['Garment name','name'],['Category','category'],['Fabric','fabric'],['Key features','features'],['Colour','colour'],['Occasion','occasion']].map(([l,f])=>(
+                              <div key={f} style={{ display:'flex', alignItems:'center', gap:8, marginBottom:8 }}>
+                                <span style={{ fontSize:11, color:'#aaa', width:90, flexShrink:0 }}>{l}</span>
+                                <div style={{ flex:1, fontSize:13, padding:'5px 9px', border:'1px solid #E2E0DC', borderRadius:7, background:'#FAFAFA', color:'#555', minHeight:30 }}>{garment[f]||'—'}</div>
+                                {garment.ai_tagged && <span style={{ fontSize:10, padding:'2px 6px', borderRadius:20, background:'#F0EFFE', color:'#5B21B6', flexShrink:0 }}>LIA</span>}
+                              </div>
+                            ))}
+                            <div style={{ fontSize:11, fontWeight:600, color:'#aaa', textTransform:'uppercase', letterSpacing:'.05em', margin:'14px 0 10px' }}>Pricing & availability</div>
+                            {[['Price (₹)','price'],['Sizes','sizes'],['Availability','availability']].map(([l,f])=>(
+                              <div key={f} style={{ display:'flex', alignItems:'center', gap:8, marginBottom:8 }}>
+                                <span style={{ fontSize:11, color:'#aaa', width:90, flexShrink:0 }}>{l}</span>
+                                <div style={{ flex:1, fontSize:13, padding:'5px 9px', border:'1px solid #E2E0DC', borderRadius:7, background:'#FAFAFA', color:'#555', minHeight:30 }}>{f==='price'&&garment[f]?`₹${Number(garment[f]).toLocaleString('en-IN')}`:garment[f]||'—'}</div>
+                              </div>
+                            ))}
+                            <div style={{ marginTop:12 }}>
+                              <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:6 }}>
+                                <span style={{ fontSize:11, color:'#aaa' }}>Description</span>
+                                {hasAccess && <button style={{ ...btn(), fontSize:11, padding:'4px 10px' }} onClick={()=>handleGenGarmentDesc(garment)} disabled={genningDesc}>{genningDesc?<Spinner size={12} color="#F4622A"/>:'✦ LIA write'}</button>}
+                              </div>
+                              <div style={{ fontSize:13, color:'#555', lineHeight:1.65, padding:'8px 10px', border:'1px solid #E2E0DC', borderRadius:8, minHeight:64, background:'#FAFAFA' }}>
+                                {garment.description || <span style={{ color:'#ccc' }}>No description yet</span>}
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Blur overlay for unsubscribed */}
+                          {!hasAccess && garment.status==='uploaded' && (
+                            <div style={{ position:'absolute', inset:0, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:12, background:'rgba(255,255,255,.7)', borderRadius:10 }}>
+                              <div style={{ fontSize:28 }}>🔒</div>
+                              <div style={{ fontSize:14, fontWeight:600, color:'#111', textAlign:'center' }}>LIA Pro required</div>
+                              <div style={{ fontSize:12, color:'#888', textAlign:'center', maxWidth:220, lineHeight:1.5 }}>Subscribe to unlock auto-tagging, descriptions and pose generation</div>
+                              <button onClick={()=>setTab('subscription')}
+                                style={{ padding:'10px 24px', fontSize:13, fontWeight:600, background:'#F4622A', border:'none', borderRadius:10, color:'#fff', cursor:'pointer', fontFamily:'inherit', boxShadow:'0 4px 16px rgba(244,98,42,.25)' }}>
+                                Unlock LIA Pro →
+                              </button>
+                            </div>
+                          )}
+                        </div>
+
+                      </div>
+                    </div>
+
+                    {/* LIA Poses — shown for all, locked if no subscription */}
+                    <div style={{ borderTop:'1px solid #F0EEE9', padding:16, position:'relative' }}>
+                      <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:14 }}>
+                        <div>
+                          <div style={{ fontSize:13, fontWeight:600 }}>LIA model poses</div>
+                          <div style={{ fontSize:12, color:'#888', marginTop:2 }}>{hasAccess ? `${(garment.gender||'female')==='male'?'Male':'Female'} model · LIA powered` : 'Subscribe to generate model photos'}</div>
+                        </div>
+                        {hasAccess
+                          ? <button onClick={()=>handleGenGarmentPoses(garment)} style={{ ...btn('primary'), fontSize:12 }}>✦ Generate all poses</button>
+                          : <button onClick={()=>setTab('subscription')} style={{ ...btn(), fontSize:12, borderColor:'#F4622A', color:'#F4622A' }}>🔒 Unlock poses →</button>}
+                      </div>
+                      <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:10, filter: !hasAccess ? 'blur(2px)' : 'none', pointerEvents: !hasAccess ? 'none' : 'auto' }}>
+                        {[['front','Front','👗'],['side','Side','↔'],['walking','Walking','🚶'],['sitting','Sitting','🪑']].map(([key,label,icon])=>{
+                          const poseUrl = garment.poses?.[key]
+                          const isPending = garment.pending_poses && key in garment.pending_poses
+                          return (
+                            <div key={key} style={{ borderRadius:10, overflow:'hidden', border:'1px solid #E8E6E2', background:'#FAFAFA', position:'relative' }}>
+                              {poseUrl ? (
+                                <>
+                                  <img src={poseUrl} alt={label} style={{ width:'100%', aspectRatio:'3/4', objectFit:'cover', display:'block' }}/>
+                                  <div style={{ position:'absolute', bottom:0, left:0, right:0, padding:'5px 7px', background:'linear-gradient(to top,rgba(0,0,0,.6),transparent)' }}>
+                                    <span style={{ fontSize:10, color:'#fff', fontWeight:500 }}>{label}</span>
+                                  </div>
+                                </>
+                              ) : (
+                                <div style={{ aspectRatio:'3/4', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:4 }}>
+                                  {isPending ? <><Spinner size={18} color="#F4622A"/><div style={{ fontSize:10, color:'#aaa' }}>Generating…</div></>
+                                    : <><div style={{ fontSize:20, opacity:.25 }}>{icon}</div><div style={{ fontSize:10, color:'#bbb' }}>{label}</div></>}
+                                </div>
+                              )}
+                            </div>
+                          )
+                        })}
                       </div>
                     </div>
                   </>
@@ -414,35 +574,310 @@ export default function Learner() {
 
           {/* WEBSITE */}
           {tab==='website' && (
-            <div style={card}>
-              <div style={chead}>
-                <div><div style={{ fontSize:13, fontWeight:600 }}>My portfolio website</div><div style={{ fontSize:12, color:'#888', marginTop:2 }}>{learner.status==='published'?'Live and shareable':'Awaiting publish from coordinator'}</div></div>
-                {learner.status==='published'&&learner.slug&&<a href={`/portfolio/${learner.slug}`} target="_blank" rel="noreferrer" style={{ ...btn(), textDecoration:'none', background:'#E6F4EC', borderColor:'#52B27A', color:'#0D6B3A' }}>View ↗</a>}
-              </div>
-              {learner.status==='published'&&learner.slug ? (
-                <div style={{ padding:18 }}>
-                  <div style={{ background:'#F7F6F4', borderRadius:9, padding:'12px 16px', display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:16 }}>
-                    <div>
-                      <div style={{ fontSize:11, color:'#aaa', marginBottom:3 }}>Your portfolio URL</div>
-                      <div style={{ fontSize:14, fontWeight:600, color:'#1D4ED8' }}>{window.location.origin}/portfolio/{learner.slug}</div>
-                    </div>
-                    <button style={btn()} onClick={()=>{ navigator.clipboard.writeText(`${window.location.origin}/portfolio/${learner.slug}`); toast('Copied!','success') }}>Copy</button>
+            <div style={{ display:'flex', flexDirection:'column', gap:14 }}>
+
+              {/* Preview card - always available */}
+              <div style={card}>
+                <div style={chead}>
+                  <div>
+                    <div style={{ fontSize:13, fontWeight:600 }}>Preview my portfolio</div>
+                    <div style={{ fontSize:12, color:'#888', marginTop:2 }}>See exactly how your portfolio looks to customers</div>
                   </div>
-                  <a href={`https://wa.me/?text=${encodeURIComponent(`Check out my fashion portfolio: ${window.location.origin}/portfolio/${learner.slug}`)}`} target="_blank" rel="noreferrer" style={{ ...btn(), textDecoration:'none', background:'#E6F4EC', borderColor:'#52B27A', color:'#0D6B3A' }}>Share on WhatsApp</a>
+                  <a href={`/portfolio/preview/${learner.id}`} target="_blank" rel="noreferrer"
+                    style={{ ...btn(), textDecoration:'none', background:'#F0EFFE', borderColor:'#9B87F5', color:'#5B21B6' }}>
+                    👁 Preview site ↗
+                  </a>
                 </div>
-              ) : (
-                <div style={{ padding:'48px 24px', textAlign:'center' }}>
-                  <div style={{ fontSize:32, marginBottom:12 }}>🎨</div>
-                  <div style={{ fontSize:15, fontWeight:600, marginBottom:6 }}>Portfolio not live yet</div>
-                  <p style={{ fontSize:13, color:'#888', lineHeight:1.6, maxWidth:300, margin:'0 auto' }}>Once your garments are reviewed, your coordinator will publish your portfolio.</p>
+                <div style={{ padding:'12px 16px', display:'flex', gap:10, flexWrap:'wrap' }}>
+                  {[
+                    [`${garments.length} garment${garments.length!==1?'s':''}`, garments.length>0?'#0D6B3A':'#aaa'],
+                    [`${garments.filter(g=>g.poses&&Object.values(g.poses).some(Boolean)).length} with LIA poses`, '#5B21B6'],
+                    [`${collections.length} collection${collections.length!==1?'s':''}`, collections.length>0?'#0D6B3A':'#aaa'],
+                  ].map(([label,color])=>(
+                    <span key={label} style={{ fontSize:12, color, background:'#F7F6F4', padding:'4px 10px', borderRadius:99 }}>{label}</span>
+                  ))}
+                </div>
+              </div>
+
+              {/* Publish card - gated by subscription */}
+              <div style={card}>
+                <div style={chead}>
+                  <div>
+                    <div style={{ fontSize:13, fontWeight:600 }}>
+                      {learner.status==='published' ? '✓ Portfolio is live' : 'Publish my portfolio'}
+                    </div>
+                    <div style={{ fontSize:12, color:'#888', marginTop:2 }}>
+                      {learner.status==='published'
+                        ? 'Your portfolio is publicly accessible at the URL below'
+                        : hasAccess ? 'Ready to go live — publish your portfolio to the world' : 'Requires an active subscription'}
+                    </div>
+                  </div>
+                  {learner.status==='published' && learner.slug && (
+                    <a href={`/portfolio/${learner.slug}`} target="_blank" rel="noreferrer"
+                      style={{ ...btn(), textDecoration:'none', background:'#E6F4EC', borderColor:'#52B27A', color:'#0D6B3A' }}>
+                      View live ↗
+                    </a>
+                  )}
+                </div>
+
+                {!hasAccess && learner.status !== 'published' ? (
+                  // Locked state
+                  <div style={{ padding:'28px 20px', textAlign:'center' }}>
+                    <div style={{ fontSize:28, marginBottom:12 }}>🔒</div>
+                    <div style={{ fontSize:14, fontWeight:600, marginBottom:8 }}>Subscribe to publish</div>
+                    <div style={{ fontSize:13, color:'#888', lineHeight:1.6, maxWidth:320, margin:'0 auto 20px' }}>
+                      An active LIA Pro subscription is required to make your portfolio publicly visible to customers.
+                    </div>
+                    <button onClick={()=>setTab('subscription')}
+                      style={{ padding:'11px 24px', fontSize:13, fontWeight:600, background:'#F4622A', border:'none', borderRadius:10, color:'#fff', cursor:'pointer', fontFamily:'inherit', boxShadow:'0 4px 16px rgba(244,98,42,.25)' }}>
+                      See plans & subscribe →
+                    </button>
+                  </div>
+                ) : learner.status === 'published' && learner.slug ? (
+                  // Published state
+                  <div style={{ padding:18 }}>
+                    <div style={{ background:'#F7F6F4', borderRadius:9, padding:'12px 16px', display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:12 }}>
+                      <div>
+                        <div style={{ fontSize:11, color:'#aaa', marginBottom:3 }}>Your portfolio URL</div>
+                        <div style={{ fontSize:14, fontWeight:600, color:'#1D4ED8' }}>{window.location.origin}/portfolio/{learner.slug}</div>
+                      </div>
+                      <button style={btn()} onClick={()=>{ navigator.clipboard.writeText(`${window.location.origin}/portfolio/${learner.slug}`); toast('Copied!','success') }}>Copy</button>
+                    </div>
+                    <div style={{ display:'flex', gap:8, flexWrap:'wrap' }}>
+                      <a href={`https://wa.me/?text=${encodeURIComponent(`Check out my fashion portfolio: ${window.location.origin}/portfolio/${learner.slug}`)}`}
+                        target="_blank" rel="noreferrer"
+                        style={{ ...btn(), textDecoration:'none', background:'#E6F4EC', borderColor:'#52B27A', color:'#0D6B3A' }}>
+                        Share on WhatsApp
+                      </a>
+                      <a href={`https://www.instagram.com/`} target="_blank" rel="noreferrer"
+                        style={{ ...btn(), textDecoration:'none' }}>
+                        Share on Instagram
+                      </a>
+                      <PublishButton learner={learner} garments={garments} hasAccess={hasAccess} onPublished={slug=>{ setLearner(p=>({...p,status:'published',slug})) }} toast={toast}/>
+                    </div>
+                  </div>
+                ) : (
+                  // Ready to publish
+                  <div style={{ padding:'24px 20px', textAlign:'center' }}>
+                    <div style={{ fontSize:32, marginBottom:12 }}>🚀</div>
+                    <div style={{ fontSize:14, fontWeight:600, marginBottom:6 }}>Ready to go live!</div>
+                    <div style={{ fontSize:13, color:'#888', lineHeight:1.6, maxWidth:320, margin:'0 auto 20px' }}>
+                      {garments.filter(g=>g.status==='tagged').length} tagged garments ready to publish.
+                    </div>
+                    <PublishButton learner={learner} garments={garments} hasAccess={hasAccess} onPublished={slug=>{ setLearner(p=>({...p,status:'published',slug})) }} toast={toast}/>
+                  </div>
+                )}
+              </div>
+
+              {/* Share kit */}
+              {learner.status==='published' && learner.slug && (
+                <div style={card}>
+                  <div style={chead}><div style={{ fontSize:13, fontWeight:600 }}>Share kit</div><div style={{ fontSize:12, color:'#888' }}>Ready-made captions to copy</div></div>
+                  <div style={{ padding:'12px 16px', display:'flex', flexDirection:'column', gap:8 }}>
+                    {[
+                      ['WhatsApp caption', `Hi! Check out my fashion portfolio 👗✨\n${window.location.origin}/portfolio/${learner.slug}\nEnquiries welcome!`],
+                      ['Instagram bio link', `${window.location.origin}/portfolio/${learner.slug}`],
+                    ].map(([label, text])=>(
+                      <div key={label} style={{ background:'#F7F6F4', borderRadius:8, padding:'10px 12px' }}>
+                        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:6 }}>
+                          <span style={{ fontSize:11, fontWeight:600, color:'#888' }}>{label}</span>
+                          <button style={{ ...btn(), fontSize:11, padding:'3px 10px' }} onClick={()=>{ navigator.clipboard.writeText(text); toast('Copied!','success') }}>Copy</button>
+                        </div>
+                        <div style={{ fontSize:12, color:'#555', lineHeight:1.6, whiteSpace:'pre-wrap' }}>{text}</div>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               )}
+            </div>
+          )}
+
+          {/* SUBSCRIPTION */}
+          {tab==='subscription' && (
+            <div style={{ display:'flex', flexDirection:'column', gap:0 }}>
+              <SubscriptionPage
+                learner={learner}
+                onSubscribed={()=>{
+                  getActiveSubscription(learner.id).then(setActiveSub)
+                  getUsage(learner.id).then(setUsage)
+                }}
+              />
             </div>
           )}
         </div>
       </main>
 
+      {/* Expired subscription overlay on garments/collections tabs */}
+      {!hasAccess && subStatus !== 'none' && ['garments','collections'].includes(tab) && (
+        <div style={{ position:'fixed', bottom:24, left:'50%', transform:'translateX(-50%)', background:'#1A1A1A', color:'#fff', borderRadius:12, padding:'14px 20px', display:'flex', alignItems:'center', gap:14, boxShadow:'0 8px 32px rgba(0,0,0,.4)', zIndex:50, maxWidth:480, width:'calc(100% - 48px)' }}>
+          <div style={{ flex:1 }}>
+            <div style={{ fontSize:13, fontWeight:600, marginBottom:2 }}>
+              {subStatus==='expired' ? '⚠ Subscription expired' : 'No active subscription'}
+            </div>
+            <div style={{ fontSize:12, color:'#888' }}>Portfolio unpublished · LIA features disabled</div>
+          </div>
+          <button onClick={()=>setShowUpgrade(true)} style={{ padding:'8px 16px', fontSize:12, fontWeight:600, background:'#F4622A', border:'none', borderRadius:8, color:'#fff', cursor:'pointer', fontFamily:'inherit', whiteSpace:'nowrap' }}>
+            Subscribe now →
+          </button>
+        </div>
+      )}
+
       {showAddCol && <AddCollectionModal onAdd={addCollection} onClose={()=>setShowAddCol(false)}/>}
+
+      {showUpgrade && (
+        <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,.75)', zIndex:200, display:'flex', alignItems:'flex-end', justifyContent:'center', padding:0 }}
+          onClick={e=>e.target===e.currentTarget&&setShowUpgrade(false)}>
+          <div style={{ background:'#fff', borderRadius:'20px 20px 0 0', width:'100%', maxWidth:640, maxHeight:'90vh', overflow:'auto', boxShadow:'0 -8px 40px rgba(0,0,0,.3)' }}>
+            <div style={{ padding:'14px 20px', borderBottom:'1px solid #F0EEE9', display:'flex', alignItems:'center', justifyContent:'space-between', position:'sticky', top:0, background:'#fff' }}>
+              <div>
+                <div style={{ fontSize:15, fontWeight:600 }}>
+                  {subStatus==='expired' ? 'Renew your subscription' : subStatus==='trial' ? 'Upgrade to full access' : 'Choose a plan'}
+                </div>
+                <div style={{ fontSize:12, color:'#888', marginTop:2 }}>Unlock LIA tagging, pose generation and portfolio publishing</div>
+              </div>
+              <button onClick={()=>setShowUpgrade(false)} style={{ background:'none', border:'none', fontSize:24, cursor:'pointer', color:'#aaa', lineHeight:1, padding:0 }}>×</button>
+            </div>
+            <div style={{ padding:20 }}>
+              <SubscriptionPage
+                learner={learner}
+                onSubscribed={()=>{
+                  setShowUpgrade(false)
+                  getActiveSubscription(learner.id).then(setActiveSub)
+                  getUsage(learner.id).then(setUsage)
+                  window.location.reload()
+                }}
+              />
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── Publish Button ─────────────────────────────────────────────
+function PublishButton({ learner, garments, hasAccess, onPublished, toast }) {
+  const [publishing, setPublishing] = useState(false)
+
+  async function handlePublish() {
+    if (!hasAccess) return
+    setPublishing(true)
+    try {
+      const slug = (learner.brand||learner.name).toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'')
+      const toPublish = garments.filter(g => ['tagged','ready'].includes(g.status))
+      if (toPublish.length) {
+        await supabase.from('garments').update({ status:'published' }).in('id', toPublish.map(g=>g.id))
+      }
+      await supabase.from('learners').update({ status:'published', slug }).eq('id', learner.id)
+      onPublished(slug)
+      toast('Portfolio published! ↗', 'success')
+    } catch(e) { toast(e.message||'Failed', 'error') }
+    setPublishing(false)
+  }
+
+  return (
+    <button onClick={handlePublish} disabled={publishing||!hasAccess}
+      style={{ display:'inline-flex', alignItems:'center', gap:6, padding:'9px 20px', fontSize:13, fontWeight:600, background: hasAccess?'#F4622A':'#ccc', border:'none', borderRadius:10, color:'#fff', cursor:hasAccess?'pointer':'not-allowed', fontFamily:'inherit' }}>
+      {publishing ? <><Spinner size={13} color="#fff"/> Publishing…</> : learner.status==='published' ? '↻ Republish' : '↗ Publish portfolio'}
+    </button>
+  )
+}
+
+// ── Subscription Status Card ──────────────────────────────────
+function SubStatusCard({ learner, activeSub, usage, hasAccess, subStatus, onUpgrade }) {
+  const daysLeft = activeSub ? Math.max(0, Math.ceil((new Date(activeSub.end_date) - new Date()) / 86400000)) : 0
+  const plan = activeSub?.subscription_plans
+
+  if (subStatus === 'none') return (
+    <div style={{ background:'linear-gradient(135deg,#0F0F0F 0%,#1A1A1A 100%)', borderRadius:12, padding:'18px 20px', display:'flex', alignItems:'center', gap:16, flexWrap:'wrap' }}>
+      <div style={{ flex:1 }}>
+        <div style={{ fontSize:14, fontWeight:600, color:'#fff', marginBottom:4 }}>Unlock LIA features</div>
+        <div style={{ fontSize:12, color:'#666', lineHeight:1.6 }}>Subscribe to enable LIA auto-tagging, pose generation, and publish your portfolio to the world.</div>
+      </div>
+      <button onClick={onUpgrade} style={{ padding:'10px 20px', fontSize:13, fontWeight:600, background:'#F4622A', border:'none', borderRadius:10, color:'#fff', cursor:'pointer', fontFamily:'inherit', whiteSpace:'nowrap', boxShadow:'0 4px 16px rgba(244,98,42,.3)' }}>
+        View plans →
+      </button>
+    </div>
+  )
+
+  if (subStatus === 'expired') return (
+    <div style={{ background:'#FEF2F2', border:'1px solid #FCA5A5', borderRadius:12, padding:'14px 18px', display:'flex', alignItems:'center', gap:14, flexWrap:'wrap' }}>
+      <div style={{ flex:1 }}>
+        <div style={{ fontSize:13, fontWeight:600, color:'#991B1B', marginBottom:3 }}>⚠ Subscription expired</div>
+        <div style={{ fontSize:12, color:'#B91C1C' }}>LIA features paused · Your portfolio is unpublished · Renew to reactivate</div>
+      </div>
+      <button onClick={onUpgrade} style={{ padding:'9px 18px', fontSize:12, fontWeight:600, background:'#DC2626', border:'none', borderRadius:9, color:'#fff', cursor:'pointer', fontFamily:'inherit', whiteSpace:'nowrap' }}>Renew now →</button>
+    </div>
+  )
+
+  if (!hasAccess || !plan) return null
+
+  const gPct = plan.garment_limit > 0 ? Math.min(100, Math.round((usage.garments_used / plan.garment_limit) * 100)) : 0
+  const pPct = plan.pose_limit > 0 ? Math.min(100, Math.round((usage.poses_used / plan.pose_limit) * 100)) : 0
+
+  return (
+    <div style={{ background:'#fff', border:'1px solid #E8E6E2', borderRadius:12, padding:'14px 18px' }}>
+      <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:12, flexWrap:'wrap', gap:8 }}>
+        <div style={{ display:'flex', alignItems:'center', gap:10 }}>
+          <div style={{ width:8, height:8, borderRadius:'50%', background: subStatus==='trial'?'#F59E0B':'#22C55E' }}/>
+          <span style={{ fontSize:13, fontWeight:600, color:'#111' }}>
+            {subStatus==='trial' ? '🎁 Free trial' : plan.name}
+          </span>
+          <span style={{ fontSize:11, color:'#888' }}>· {daysLeft} day{daysLeft!==1?'s':''} left</span>
+          {daysLeft <= 7 && <span style={{ fontSize:11, color:'#C94E1E', fontWeight:500 }}>⚠ Renewing soon</span>}
+        </div>
+        <button onClick={onUpgrade} style={{ fontSize:11, padding:'4px 12px', borderRadius:99, border:'1px solid #F4622A', background:'transparent', color:'#F4622A', cursor:'pointer', fontFamily:'inherit', fontWeight:500 }}>
+          {subStatus==='trial' ? 'Upgrade plan' : 'Manage'}
+        </button>
+      </div>
+      <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>
+        {[[`Garments`, usage.garments_used, plan.garment_limit, gPct],
+          [`LIA poses`, usage.poses_used, plan.pose_limit, pPct]].map(([label, used, limit, pct])=>(
+          <div key={label}>
+            <div style={{ display:'flex', justifyContent:'space-between', marginBottom:5 }}>
+              <span style={{ fontSize:11, color:'#888' }}>{label} this month</span>
+              <span style={{ fontSize:11, fontWeight:600, color: pct>=80?'#C94E1E':'#333' }}>{used} / {limit===-1?'∞':limit}</span>
+            </div>
+            <div style={{ height:5, background:'#F0EEE9', borderRadius:99, overflow:'hidden' }}>
+              {limit > 0 && <div style={{ height:'100%', width:`${pct}%`, background: pct>=80?'#C94E1E':'#F4622A', borderRadius:99, transition:'width .4s' }}/>}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+// ── Upgrade Modal ─────────────────────────────────────────────
+function UpgradeModal({ feature, used, limit, onClose, onUpgrade }) {
+  return (
+    <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,.7)', zIndex:200, display:'flex', alignItems:'center', justifyContent:'center', padding:24 }}
+      onClick={e=>e.target===e.currentTarget&&onClose()}>
+      <div style={{ background:'#fff', borderRadius:20, width:'100%', maxWidth:420, padding:32, textAlign:'center' }}>
+        <div style={{ width:56, height:56, borderRadius:'50%', background:'#FEF0EA', display:'flex', alignItems:'center', justifyContent:'center', fontSize:24, margin:'0 auto 16px' }}>🔒</div>
+        <div style={{ fontFamily:"'DM Serif Display',serif", fontSize:22, color:'#111', marginBottom:8 }}>
+          {feature === 'garments' ? 'Monthly limit reached' : 'LIA Pro required'}
+        </div>
+        <div style={{ fontSize:14, color:'#888', lineHeight:1.7, marginBottom:24 }}>
+          {feature === 'garments'
+            ? `You've used ${used} of ${limit} garments this month. Upgrade your plan to upload more.`
+            : 'LIA auto-tagging, pose generation and portfolio publishing require an active subscription.'}
+        </div>
+        <div style={{ background:'#F7F6F4', borderRadius:12, padding:'14px 18px', marginBottom:24, textAlign:'left' }}>
+          <div style={{ fontSize:12, fontWeight:600, color:'#111', marginBottom:8 }}>What you unlock with LIA Pro</div>
+          {['LIA auto-tags every garment instantly','Generate 4 AI model poses per garment','Publish your portfolio website','Accept orders & enquiries from customers'].map(f=>(
+            <div key={f} style={{ fontSize:12, color:'#555', display:'flex', alignItems:'center', gap:7, marginBottom:5 }}>
+              <span style={{ color:'#F4622A', fontWeight:600 }}>✓</span> {f}
+            </div>
+          ))}
+        </div>
+        <div style={{ display:'flex', gap:10 }}>
+          <button onClick={onClose} style={{ flex:1, padding:'12px', fontSize:13, fontWeight:500, background:'#F7F6F4', border:'none', borderRadius:10, cursor:'pointer', fontFamily:'inherit', color:'#555' }}>Maybe later</button>
+          <button onClick={onUpgrade} style={{ flex:2, padding:'12px', fontSize:13, fontWeight:600, background:'#F4622A', border:'none', borderRadius:10, color:'#fff', cursor:'pointer', fontFamily:'inherit', boxShadow:'0 4px 16px rgba(244,98,42,.25)' }}>
+            See plans & upgrade →
+          </button>
+        </div>
+      </div>
     </div>
   )
 }

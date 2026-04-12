@@ -1,12 +1,14 @@
 import { useState, useEffect } from 'react'
-import { useParams } from 'react-router-dom'
+import { useParams, useLocation } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { Spinner } from '../components/ui'
 
 const MEASUREMENTS = ['Bust','Waist','Hips','Shoulder','Sleeve length','Front length','Back length','Inseam','Thigh','Calf']
 
 export default function Portfolio() {
-  const { slug } = useParams()
+  const { slug, learnerId } = useParams()
+  const location = useLocation()
+  const isPreview = !!learnerId || location.pathname.includes('/preview/')
   const [lightbox,   setLightbox]   = useState(null) // { images: [], index: 0 }
   const [learner,    setLearner]    = useState(null)
   const [garments,   setGarments]   = useState([])
@@ -22,7 +24,15 @@ export default function Portfolio() {
 
   useEffect(() => {
     async function load() {
-      const { data:l } = await supabase.from('learners').select('*').eq('slug',slug).eq('status','published').single()
+      // Preview mode — load by learnerId regardless of published status
+      let l
+      if (learnerId) {
+        const { data } = await supabase.from('learners').select('*').eq('id', learnerId).single()
+        l = data
+      } else {
+        const { data } = await supabase.from('learners').select('*').eq('slug', slug).eq('status', 'published').single()
+        l = data
+      }
       if (!l) { setLoading(false); return }
       const [{ data:g }, { data:c }] = await Promise.all([
         supabase.from('garments').select('*').eq('learner_id',l.id).eq('status','published').order('created_at'),
@@ -129,8 +139,19 @@ export default function Portfolio() {
         .fu{animation:fadeUp .6s ease both}
       `}</style>
 
+      {/* PREVIEW BANNER */}
+      {isPreview && (
+        <div style={{ position:'fixed', top:0, left:0, right:0, zIndex:200, background:'#5B21B6', padding:'8px 20px', display:'flex', alignItems:'center', justifyContent:'space-between', gap:12 }}>
+          <div style={{ display:'flex', alignItems:'center', gap:10 }}>
+            <span style={{ fontSize:11, fontWeight:700, color:'#fff', letterSpacing:'.08em', textTransform:'uppercase', background:'rgba(255,255,255,.2)', padding:'2px 8px', borderRadius:99 }}>Preview</span>
+            <span style={{ fontSize:13, color:'rgba(255,255,255,.8)' }}>This is how your portfolio looks to customers — not publicly visible yet</span>
+          </div>
+          <button onClick={()=>window.close()} style={{ fontSize:12, color:'rgba(255,255,255,.7)', background:'none', border:'1px solid rgba(255,255,255,.3)', borderRadius:6, padding:'4px 12px', cursor:'pointer', fontFamily:'inherit' }}>Close preview ×</button>
+        </div>
+      )}
+
       {/* NAV */}
-      <nav style={{ position:'fixed', top:0, left:0, right:0, zIndex:100, background:'rgba(10,10,10,.95)', backdropFilter:'blur(16px)', borderBottom:'1px solid rgba(255,255,255,.05)' }}>
+      <nav style={{ position:'fixed', top: isPreview ? 37 : 0, left:0, right:0, zIndex:100, background:'rgba(10,10,10,.95)', backdropFilter:'blur(16px)', borderBottom:'1px solid rgba(255,255,255,.05)' }}>
         <div style={{ maxWidth:1100, margin:'0 auto', padding:'0 24px', display:'flex', alignItems:'center', justifyContent:'space-between', height:58 }}>
           <div style={{ display:'flex', alignItems:'center', gap:10 }}>
             {learner.logo_url
@@ -155,7 +176,7 @@ export default function Portfolio() {
       </nav>
 
       {/* HERO */}
-      <section id="home" style={{ minHeight:'100vh', background:'#0A0A0A', display:'flex', alignItems:'center', paddingTop:58, position:'relative', overflow:'hidden' }}>
+      <section id="home" style={{ minHeight:'100vh', background:'#0A0A0A', display:'flex', alignItems:'center', paddingTop: isPreview ? 95 : 58, position:'relative', overflow:'hidden' }}>
         <div style={{ position:'absolute', inset:0, backgroundImage:`linear-gradient(rgba(244,98,42,.05) 1px,transparent 1px),linear-gradient(90deg,rgba(244,98,42,.05) 1px,transparent 1px)`, backgroundSize:'56px 56px' }}/>
         <div style={{ position:'absolute', top:'15%', right:'8%', width:500, height:500, borderRadius:'50%', background:`radial-gradient(circle,rgba(244,98,42,.1) 0%,transparent 65%)`, pointerEvents:'none' }}/>
 
