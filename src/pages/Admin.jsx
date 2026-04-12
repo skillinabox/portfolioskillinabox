@@ -956,8 +956,11 @@ function PoseSection({ garment, onUpdate, toast }) {
           <div style={{ fontSize:13, fontWeight:600, color:'#111', marginBottom:4 }}>Virtual try-on</div>
           <div style={{ fontSize:12, color:'#888', lineHeight:1.6, marginBottom:12 }}>Upload a photo of the customer — LIA places this garment on them.</div>
           <div style={{ background:'#F7F6F4', borderRadius:10, padding:'12px 14px', marginBottom:14, fontSize:12, color:'#666', lineHeight:1.8 }}>
-            <div style={{ fontWeight:600, marginBottom:4, color:'#111' }}>📸 Photo guidelines for best results</div>
-            <div>✓ Full body or at least waist-up &nbsp; ✓ Plain background &nbsp; ✓ Facing forward</div>
+            <div style={{ fontWeight:600, marginBottom:6, color:'#111' }}>📸 Photo guidelines for best results</div>
+            <div style={{ background:'#FEF0EA', border:'1px solid #F4622A44', borderRadius:7, padding:'7px 10px', marginBottom:6, fontSize:12, color:'#C94E1E', fontWeight:500 }}>
+              ⚠ Must be a full body photo (head to toe) — portrait/bust shots only show the top half of the garment
+            </div>
+            <div>✓ Full body head-to-toe shot &nbsp; ✓ Plain background &nbsp; ✓ Facing forward</div>
             <div>✓ Good even lighting &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; ✗ Avoid busy patterned clothing</div>
           </div>
           <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12, marginBottom:14 }}>
