@@ -36,7 +36,26 @@ function AuthProvider({ children }) {
     return () => subscription.unsubscribe()
   }, [])
 
-  async function loadProfile(userId) {
+  // ── Single-session enforcement ────────────────────────────
+
+  useEffect(() => {
+    if (!user) return
+    const check = async () => {
+      const stored = localStorage.getItem('snb_session_token')
+      if (!stored) return // no token stored (e.g. admin on trusted device)
+      const { data } = await supabase.from('profiles').select('session_token').eq('id', user.id).single()
+      if (data && data.session_token && data.session_token !== stored) {
+        // Token mismatch — another device logged in
+        localStorage.removeItem('snb_session_token')
+        localStorage.setItem('snb_kicked', 'You were signed out because your account was accessed on another device.')
+        await supabase.auth.signOut()
+        window.location.replace('/login')
+      }
+    }
+    check() // check immediately on mount
+    const interval = setInterval(check, 30000) // then every 30s
+    return () => clearInterval(interval)
+  }, [user])
     setLoading(true)
     try {
       // Try to get profile
@@ -77,6 +96,11 @@ function AuthProvider({ children }) {
   }
 
   async function signOut() {
+    // Clear session token from DB so other devices are also invalidated
+    if (user) {
+      await supabase.from('profiles').update({ session_token: null }).eq('id', user.id)
+    }
+    localStorage.removeItem('snb_session_token')
     await supabase.auth.signOut()
     setUser(null); setProfile(null); setLearner(null)
   }
