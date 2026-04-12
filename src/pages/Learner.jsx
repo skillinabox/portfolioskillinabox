@@ -1,9 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { supabase, uploadGarmentImage, uploadProfileImage, tagGarment, generateCollectionDesc, generateGarmentDesc, fileToBase64 } from '../lib/supabase'
-import { checkExpiry, canPerform, incrementUsage, getUsage, getActiveSubscription } from '../lib/subscription'
 import { useAuth } from '../App'
 import { SIBLogo, Avatar, StatusBadge, GarmentThumb, Empty, Spinner, Modal, useToast } from '../components/ui'
-import SubscriptionPage from './Subscription'
 
 const SEASONS = ['Any','Spring','Summer','Monsoon','Festive','Winter','Bridal']
 
@@ -32,8 +30,6 @@ export default function Learner() {
   const [genningDesc,  setGenningDesc]  = useState(false)
   const [editingGid,   setEditingGid]   = useState(null)
   const [editForm,     setEditForm]     = useState({})
-  const [activeSub,    setActiveSub]    = useState(null)
-  const [usage,        setUsage]        = useState({ garments_used:0, poses_used:0 })
 
   const fileRef  = useRef()
   const photoRef = useRef()
@@ -43,17 +39,8 @@ export default function Learner() {
   const selEnquiry = enquiries.find(e => e.id === selEnqId)
   const unread     = enquiries.filter(e => !e.read).length
 
-  const subStatus = learner?.subscription_status || 'none'
-  const hasAccess = ['active','trial'].includes(subStatus) && learner?.subscription_end && new Date(learner.subscription_end) > new Date()
-
   useEffect(() => {
-    if (authLearner?.id) {
-      loadAll(authLearner.id)
-      setLearner(authLearner)
-      checkExpiry(authLearner.id)
-      getActiveSubscription(authLearner.id).then(setActiveSub)
-      getUsage(authLearner.id).then(setUsage)
-    }
+    if (authLearner?.id) { loadAll(authLearner.id); setLearner(authLearner) }
     else setLoading(false)
   }, [authLearner])
 
@@ -89,20 +76,9 @@ export default function Learner() {
 
   async function handleUpload(file) {
     if (!file || !learner) return
-    // Check subscription access
-    const access = await canPerform(learner.id, 'upload_garment')
-    if (!access.allowed) {
-      if (access.reason === 'subscription_expired' || access.reason === 'No active subscription found') {
-        toast('Subscribe to upload garments', 'error'); setTab('subscription'); return
-      }
-      if (access.reason === 'garment_limit_reached') {
-        toast(`Monthly limit reached (${access.used}/${access.limit} garments). Upgrade your plan.`, 'error'); return
-      }
-    }
     const { data:g, error } = await supabase.from('garments').insert({ learner_id: learner.id, status: 'uploading', name: file.name.replace(/\.[^.]+$/, '') }).select().single()
     if (error) { toast('Upload failed', 'error'); return }
     mutG(gs => [...gs, g]); setSelGid(g.id)
-    await incrementUsage(learner.id, 'garments')
     try {
       const imageUrl = await uploadGarmentImage(learner.id, g.id, file)
       mutG(gs => gs.map(x => x.id === g.id ? { ...x, image_url: imageUrl, status: 'tagging' } : x))
@@ -247,8 +223,7 @@ export default function Learner() {
         {[['garments','My garments',`${garments.length} pieces`],
           ['collections','Collections',`${collections.length} created`],
           ['enquiries','Enquiries',`${unread} unread`],
-          ['website','My website',learner.status==='published'?'Live ✓':'Awaiting publish'],
-          ['subscription','Subscription', hasAccess ? (activeSub?.status==='trial'?'Free trial':'Active ✓') : subStatus==='expired'?'⚠ Expired':'Not subscribed']].map(([id,label,sub])=>(
+          ['website','My website',learner.status==='published'?'Live ✓':'Awaiting publish']].map(([id,label,sub])=>(
           <div key={id} onClick={()=>setTab(id)}
             style={{ padding:'12px 14px', cursor:'pointer', borderBottom:'1px solid #1A1A1A', borderLeft:`3px solid ${tab===id?'#F4622A':'transparent'}`, background:tab===id?'#1A1A1A':'transparent', display:'flex', alignItems:'center', justifyContent:'space-between' }}>
             <div>
@@ -464,36 +439,8 @@ export default function Learner() {
               )}
             </div>
           )}
-
-          {/* SUBSCRIPTION */}
-          {tab==='subscription' && (
-            <div style={{ display:'flex', flexDirection:'column', gap:0 }}>
-              <SubscriptionPage
-                learner={learner}
-                onSubscribed={()=>{
-                  getActiveSubscription(learner.id).then(setActiveSub)
-                  getUsage(learner.id).then(setUsage)
-                }}
-              />
-            </div>
-          )}
         </div>
       </main>
-
-      {/* Expired subscription overlay on garments/collections tabs */}
-      {!hasAccess && subStatus !== 'none' && ['garments','collections'].includes(tab) && (
-        <div style={{ position:'fixed', bottom:24, left:'50%', transform:'translateX(-50%)', background:'#1A1A1A', color:'#fff', borderRadius:12, padding:'14px 20px', display:'flex', alignItems:'center', gap:14, boxShadow:'0 8px 32px rgba(0,0,0,.4)', zIndex:50, maxWidth:480, width:'calc(100% - 48px)' }}>
-          <div style={{ flex:1 }}>
-            <div style={{ fontSize:13, fontWeight:600, marginBottom:2 }}>
-              {subStatus==='expired' ? '⚠ Subscription expired' : 'No active subscription'}
-            </div>
-            <div style={{ fontSize:12, color:'#888' }}>Portfolio unpublished · LIA features disabled</div>
-          </div>
-          <button onClick={()=>setTab('subscription')} style={{ padding:'8px 16px', fontSize:12, fontWeight:600, background:'#F4622A', border:'none', borderRadius:8, color:'#fff', cursor:'pointer', fontFamily:'inherit', whiteSpace:'nowrap' }}>
-            Subscribe now →
-          </button>
-        </div>
-      )}
 
       {showAddCol && <AddCollectionModal onAdd={addCollection} onClose={()=>setShowAddCol(false)}/>}
     </div>
