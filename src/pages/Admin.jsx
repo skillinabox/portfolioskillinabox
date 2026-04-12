@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { supabase, uploadGarmentImage, uploadProfileImage, tagGarment, generateCollectionDesc, generateGarmentDesc, makeSlug, fileToBase64 } from '../lib/supabase'
+import { grantFreeTrial, getPlans, getActiveSubscription, getUsage, currentMonth } from '../lib/subscription'
 import { useAuth } from '../App'
 import { SIBLogo, Avatar, StatusBadge, GarmentThumb, Modal, Empty, Spinner, useToast } from '../components/ui'
 
@@ -34,6 +35,7 @@ export default function Admin() {
   const [showAdd,      setShowAdd]      = useState(false)
   const [showAddCol,   setShowAddCol]   = useState(false)
   const [showPubConf,  setShowPubConf]  = useState(false)
+  const [showPlans,    setShowPlans]    = useState(false)
   const [genningDesc,  setGenningDesc]  = useState(false)
 
   const fileRef  = useRef()
@@ -211,6 +213,7 @@ export default function Admin() {
         </div>
         <div style={{ marginLeft:'auto', display:'flex', gap:8 }}>
           {learner?.slug && <a href={`/portfolio/${learner.slug}`} target="_blank" rel="noreferrer" style={{ ...btn('ghost'), color:'#888', textDecoration:'none', fontSize:12 }}>View site ↗</a>}
+          <button style={{ ...btn(), fontSize:12 }} onClick={()=>setShowPlans(true)}>⚙ Plans & offers</button>
           <button style={btn('ghost')} onClick={signOut}>Sign out</button>
         </div>
       </header>
@@ -237,7 +240,12 @@ export default function Admin() {
                   : <Avatar name={l.name} size={28}/>}
                 <div style={{ minWidth:0 }}>
                   <div style={{ fontSize:13, fontWeight:500, color:'#ddd', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{l.name}</div>
-                  <div style={{ fontSize:11, color:'#555', marginTop:1 }}>{l.brand||'No brand'} · <StatusBadge status={l.status}/></div>
+                  <div style={{ fontSize:11, color:'#555', marginTop:1 }}>
+                    {l.brand||'No brand'} · <StatusBadge status={l.status}/>
+                    {l.subscription_status==='expired'&&<span style={{ marginLeft:4, fontSize:10, color:'#991B1B', fontWeight:500 }}>⚠ Sub expired</span>}
+                    {l.subscription_status==='trial'&&<span style={{ marginLeft:4, fontSize:10, color:'#92400E', fontWeight:500 }}>🎁 Trial</span>}
+                    {l.subscription_status==='active'&&<span style={{ marginLeft:4, fontSize:10, color:'#0D6B3A', fontWeight:500 }}>✓ Active</span>}
+                  </div>
                 </div>
               </div>
             </div>
@@ -287,7 +295,7 @@ export default function Admin() {
 
               {/* Tabs */}
               <div style={{ display:'flex', borderTop:'1px solid #F0EEE9', padding:'0 18px' }}>
-                {[['garments',`Garments (${garments.length})`],['collections',`Collections (${collections.length})`],['enquiries',`Enquiries (${enquiries.length})`],['profile','Profile']].map(([t,l])=>(
+                {[['garments',`Garments (${garments.length})`],['collections',`Collections (${collections.length})`],['enquiries',`Enquiries (${enquiries.length})`],['subscription','Subscription'],['profile','Profile']].map(([t,l])=>(
                   <button key={t} onClick={()=>setTab(t)} style={{ padding:'10px 16px', fontSize:13, fontWeight:tab===t?600:400, color:tab===t?'#F4622A':'#888', background:'none', border:'none', borderBottom:tab===t?'2px solid #F4622A':'2px solid transparent', cursor:'pointer', marginBottom:-1, fontFamily:'inherit' }}>{l}</button>
                 ))}
               </div>
@@ -518,14 +526,20 @@ export default function Admin() {
                 <div style={{ padding:'0 18px 16px', fontSize:11, color:'#aaa' }}>
                   Learner sign-up link: <strong>{window.location.origin}/login</strong>
                 </div>
+                <PasswordManager learner={learner} toast={toast}/>
+                <DeleteLearner learner={learner} toast={toast} onDeleted={()=>{ setSelLid(null); loadLearners() }}/>
               </div>
             )}
+
+            {/* ── SUBSCRIPTION TAB ── */}
+            {tab==='subscription' && <AdminSubscriptionTab learner={learner} toast={toast} btn={btn} card={card} chead={chead}/>}
           </div>
         )}
       </main>
 
       {showAdd&&<AddLearnerModal onAdd={addLearner} onClose={()=>setShowAdd(false)}/>}
       {showAddCol&&<AddCollectionModal onAdd={addCollection} onClose={()=>setShowAddCol(false)}/>}
+      {showPlans&&<PlansModal onClose={()=>setShowPlans(false)} toast={toast}/>}
       {showPubConf&&(
         <Modal title="Publish portfolio" onClose={()=>setShowPubConf(false)} width={400}>
           <p style={{ fontSize:14, color:'#666', lineHeight:1.6, marginBottom:20 }}>Publish all tagged garments for <strong>{learner?.name}</strong>?</p>
@@ -539,6 +553,178 @@ export default function Admin() {
   )
 }
 
+// ── Admin Subscription Tab ────────────────────────────────────
+function AdminSubscriptionTab({ learner, toast, btn, card, chead }) {
+  const [plans,    setPlans]    = useState([])
+  const [activeSub,setActiveSub]= useState(null)
+  const [usage,    setUsage]    = useState({ garments_used:0, poses_used:0 })
+  const [history,  setHistory]  = useState([])
+  const [loading,  setLoading]  = useState(true)
+  const [granting, setGranting] = useState(false)
+
+  useEffect(() => { load() }, [learner.id])
+
+  async function load() {
+    setLoading(true)
+    const [p, s, u, h] = await Promise.all([
+      getPlans(),
+      getActiveSubscription(learner.id),
+      getUsage(learner.id),
+      supabase.from('subscriptions').select('*, subscription_plans(name,slug)').eq('learner_id', learner.id).order('created_at', { ascending:false }).limit(10),
+    ])
+    setPlans(p)
+    setActiveSub(s)
+    setUsage(u)
+    setHistory(h.data || [])
+    setLoading(false)
+  }
+
+  async function handleGrantTrial() {
+    const freePlan = plans.find(p => p.slug === 'free')
+    if (!freePlan) { toast('Free plan not found in database', 'error'); return }
+    if (learner.is_free_trial_used) {
+      if (!confirm(`${learner.name} has already used their free trial. Grant another anyway?`)) return
+    }
+    setGranting(true)
+    try {
+      await grantFreeTrial(learner.id, freePlan.id)
+      toast(`Free trial granted to ${learner.name} ✓`, 'success')
+      await load()
+    } catch(e) { toast(e.message, 'error') }
+    setGranting(false)
+  }
+
+  async function handleExtend(months) {
+    if (!activeSub) { toast('No active subscription to extend', 'error'); return }
+    const newEnd = new Date(activeSub.end_date)
+    newEnd.setMonth(newEnd.getMonth() + months)
+    await supabase.from('subscriptions').update({ end_date: newEnd.toISOString() }).eq('id', activeSub.id)
+    await supabase.from('learners').update({ subscription_end: newEnd.toISOString() }).eq('id', learner.id)
+    toast(`Subscription extended by ${months} month${months>1?'s':''} ✓`, 'success')
+    await load()
+  }
+
+  async function handleRevoke() {
+    if (!confirm(`Revoke ${learner.name}'s subscription? Their portfolio will be unpublished.`)) return
+    await supabase.from('subscriptions').update({ status:'expired' }).eq('learner_id', learner.id).in('status',['active','trial'])
+    await supabase.from('learners').update({ subscription_status:'expired' }).eq('id', learner.id)
+    toast('Subscription revoked', 'success')
+    await load()
+  }
+
+  if (loading) return <div style={{ padding:40, textAlign:'center' }}><Spinner color="#F4622A"/></div>
+
+  const isActive = activeSub && ['active','trial'].includes(activeSub.status) && new Date(activeSub.end_date) > new Date()
+  const daysLeft = activeSub ? Math.max(0, Math.ceil((new Date(activeSub.end_date) - new Date()) / 86400000)) : 0
+  const activePlan = activeSub?.subscription_plans
+
+  return (
+    <div style={{ display:'flex', flexDirection:'column', gap:14 }}>
+
+      {/* Current status */}
+      <div style={card}>
+        <div style={chead}>
+          <div style={{ fontSize:13, fontWeight:600 }}>Subscription status</div>
+          <div style={{ display:'flex', gap:8 }}>
+            {!isActive && (
+              <button style={btn('primary')} onClick={handleGrantTrial} disabled={granting}>
+                {granting ? <><Spinner size={12} color="#fff"/> Granting…</> : '🎁 Grant free trial'}
+              </button>
+            )}
+            {isActive && (
+              <>
+                <button style={btn()} onClick={()=>handleExtend(1)}>+ 1 month</button>
+                <button style={btn()} onClick={()=>handleExtend(3)}>+ 3 months</button>
+                <button style={{ ...btn(), color:'#991B1B', borderColor:'#FCA5A5' }} onClick={handleRevoke}>Revoke</button>
+              </>
+            )}
+          </div>
+        </div>
+        <div style={{ padding:'14px 16px' }}>
+          {isActive ? (
+            <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:12 }}>
+              {[
+                ['Plan', activePlan?.name || '—'],
+                ['Status', activeSub.status==='trial'?'Free trial':'Active'],
+                ['Days left', daysLeft],
+                ['Expires', new Date(activeSub.end_date).toLocaleDateString('en-IN',{day:'numeric',month:'short',year:'numeric'})],
+                ['Amount paid', activeSub.amount_paid>0?`₹${Number(activeSub.amount_paid).toLocaleString('en-IN')}`:'Free'],
+                ['Granted by', activeSub.granted_by_admin?'Admin':'Self-pay'],
+              ].map(([l,v])=>(
+                <div key={l}>
+                  <div style={{ fontSize:11, color:'#aaa', marginBottom:3 }}>{l}</div>
+                  <div style={{ fontSize:13, fontWeight:500, color:l==='Days left'&&daysLeft<=7?'#C94E1E':'#111' }}>{v}</div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div style={{ display:'flex', alignItems:'center', gap:12 }}>
+              <div style={{ width:10, height:10, borderRadius:'50%', background: learner.subscription_status==='expired'?'#EF4444':'#D1D5DB', flexShrink:0 }}/>
+              <div>
+                <div style={{ fontSize:13, fontWeight:500 }}>
+                  {learner.subscription_status==='expired' ? 'Subscription expired' : 'No subscription'}
+                </div>
+                <div style={{ fontSize:12, color:'#888', marginTop:2 }}>
+                  {learner.is_free_trial_used ? 'Free trial already used' : 'Free trial available'}
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Usage this month */}
+      {isActive && activePlan && (
+        <div style={card}>
+          <div style={chead}><div style={{ fontSize:13, fontWeight:600 }}>Usage — {currentMonth()}</div></div>
+          <div style={{ padding:'14px 16px', display:'grid', gridTemplateColumns:'1fr 1fr', gap:16 }}>
+            {[
+              ['Garments uploaded', usage.garments_used, activePlan.garment_limit],
+              ['LIA poses generated', usage.poses_used, activePlan.pose_limit],
+            ].map(([label, used, limit])=>(
+              <div key={label}>
+                <div style={{ display:'flex', justifyContent:'space-between', marginBottom:6 }}>
+                  <span style={{ fontSize:12, color:'#555' }}>{label}</span>
+                  <span style={{ fontSize:12, fontWeight:600 }}>{used} / {limit===-1?'∞':limit}</span>
+                </div>
+                <div style={{ height:6, background:'#F0EEE9', borderRadius:99, overflow:'hidden' }}>
+                  {limit !== -1 && <div style={{ height:'100%', width:`${Math.min(100,(used/limit)*100)}%`, background:used/limit>=.8?'#C94E1E':'#F4622A', borderRadius:99 }}/>}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Payment history */}
+      {history.length > 0 && (
+        <div style={card}>
+          <div style={chead}><div style={{ fontSize:13, fontWeight:600 }}>Subscription history</div></div>
+          {history.map(h=>(
+            <div key={h.id} style={{ padding:'10px 16px', borderBottom:'1px solid #F5F3F0', display:'flex', alignItems:'center', gap:12 }}>
+              <div style={{ flex:1 }}>
+                <div style={{ fontSize:13, fontWeight:500 }}>{h.subscription_plans?.name}</div>
+                <div style={{ fontSize:11, color:'#aaa', marginTop:2 }}>
+                  {new Date(h.start_date).toLocaleDateString('en-IN',{day:'numeric',month:'short'})} → {new Date(h.end_date).toLocaleDateString('en-IN',{day:'numeric',month:'short',year:'numeric'})}
+                  {h.granted_by_admin && <span style={{ marginLeft:6, color:'#0D6B3A' }}>· Admin granted</span>}
+                  {h.razorpay_payment_id && <span style={{ marginLeft:6, color:'#888', fontFamily:'monospace', fontSize:10 }}>{h.razorpay_payment_id.slice(0,16)}…</span>}
+                </div>
+              </div>
+              <div style={{ textAlign:'right' }}>
+                <div style={{ fontSize:13, fontWeight:600 }}>{h.amount_paid>0?`₹${Number(h.amount_paid).toLocaleString('en-IN')}`:'Free'}</div>
+                <div style={{ fontSize:11, marginTop:2 }}>
+                  <span style={{ padding:'1px 7px', borderRadius:99, fontSize:10, fontWeight:500, background:h.status==='active'||h.status==='trial'?'#E6F4EC':h.status==='expired'?'#FEE2E2':'#F3F4F6', color:h.status==='active'||h.status==='trial'?'#0D6B3A':h.status==='expired'?'#991B1B':'#666' }}>{h.status}</span>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── Field row ─────────────────────────────────────────────────
 function FieldRow({ label, value, onChange, ai }) {
   return (
     <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:8 }}>
@@ -552,16 +738,26 @@ function FieldRow({ label, value, onChange, ai }) {
 
 // ── Pose Generation Section ───────────────────────────────────
 const POSE_LABELS = [
-  { key:'front',   label:'Front view', icon:'👗' },
-  { key:'side',    label:'Side view',  icon:'↔'  },
-  { key:'walking', label:'Walking',    icon:'🚶' },
-  { key:'sitting', label:'Sitting',    icon:'🪑' },
+  { key:'front',   label:'Front',    icon:'👗' },
+  { key:'back',    label:'Back',     icon:'🔄' },
+  { key:'left',    label:'3/4 Left', icon:'↖'  },
+  { key:'right',   label:'3/4 Right',icon:'↗'  },
+  { key:'walking', label:'Walking',  icon:'🚶' },
+  { key:'sitting', label:'Sitting',  icon:'🪑' },
+  { key:'closeup', label:'Close-up', icon:'🔍' },
+  { key:'outdoor', label:'Outdoor',  icon:'🌿' },
 ]
 const POLL_INTERVAL = 6000
 
 function PoseSection({ garment, onUpdate, toast }) {
-  const [submitting, setSubmitting] = useState(false)
-  const pollRef = useRef(null)
+  const [submitting,    setSubmitting]    = useState(false)
+  const [selPoses,      setSelPoses]      = useState(['front','back','walking','sitting'])
+  const [poseTab,       setPoseTab]       = useState('generate') // 'generate' | 'tryon'
+  const [tryonImg,      setTryonImg]      = useState(null) // base64
+  const [tryonResult,   setTryonResult]   = useState(null)
+  const [tryonLoading,  setTryonLoading]  = useState(false)
+  const tryonRef = useRef()
+  const pollRef  = useRef(null)
 
   const poses        = garment.poses        || {}
   const pendingPoses = garment.pending_poses || {}
@@ -599,45 +795,185 @@ function PoseSection({ garment, onUpdate, toast }) {
     } catch(e) { console.error('Poll error:', e) }
   }
 
+  function togglePose(key) {
+    setSelPoses(prev => prev.includes(key) ? prev.filter(k=>k!==key) : [...prev, key])
+  }
+
   async function handleGenerate(poseKey) {
     if (!garment.image_url) { toast('Upload a garment image first', 'error'); return }
+    const keys = poseKey ? [poseKey] : selPoses
+    if (!keys.length) { toast('Select at least one pose', 'error'); return }
     setSubmitting(true)
     try {
       const res = await fetch('/api/submit-poses', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ garment_image_url: garment.image_url, gender: garment.gender||'female', pose_key: poseKey||undefined }),
+        body: JSON.stringify({ garment_image_url: garment.image_url, gender: garment.gender||'female', pose_keys: keys }),
       })
       const data = await res.json()
       if (data.error) throw new Error(data.error)
       const newPending = { ...pendingPoses, ...data.prediction_ids }
       await onUpdate('pending_poses', newPending)
       startPolling(newPending)
-      toast(poseKey ? `Generating ${poseKey}…` : 'Generating all poses — safe to switch screens ✓', 'default')
+      toast(`Generating ${keys.length} pose${keys.length!==1?'s':''}  — safe to switch screens ✓`, 'default')
     } catch(err) { toast(err.message||'Failed', 'error') }
     setSubmitting(false)
+  }
+
+  async function handleTryonUpload(file) {
+    const reader = new FileReader()
+    reader.onload = e => setTryonImg(e.target.result)
+    reader.readAsDataURL(file)
+  }
+
+  async function handleTryon() {
+    if (!tryonImg || !garment.image_url) { toast('Upload a photo first', 'error'); return }
+    setTryonLoading(true)
+    try {
+      const base64 = tryonImg.split(',')[1]
+      const res = await fetch('/api/try-on', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ model_image_base64: base64, garment_image_url: garment.image_url }),
+      })
+      const data = await res.json()
+      if (data.error) throw new Error(data.error)
+      setTryonResult(data.result_url)
+      toast('Try-on complete ✓', 'success')
+    } catch(err) { toast(err.message||'Try-on failed', 'error') }
+    setTryonLoading(false)
   }
 
   if (!garment.image_url) return null
 
   return (
     <div style={{ borderTop:'1px solid #F0EEE9', padding:16 }}>
-      <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:14, gap:12, flexWrap:'wrap' }}>
-        <div>
-          <div style={{ fontSize:13, fontWeight:600, color:'#111' }}>LIA model poses</div>
-          <div style={{ fontSize:12, color:'#888', marginTop:2 }}>{garment.gender==='male'?'Male model':'Female model'} · LIA powered</div>
-          {hasPending && <div style={{ fontSize:11, color:'#F4622A', marginTop:4, display:'flex', alignItems:'center', gap:5 }}><Spinner size={11} color="#F4622A"/> Generating — safe to switch screens</div>}
-        </div>
-        <button onClick={()=>handleGenerate(null)} disabled={submitting||hasPending}
-          style={{ display:'inline-flex', alignItems:'center', gap:6, padding:'7px 16px', fontSize:12, fontWeight:500, borderRadius:8, border:'1px solid #F4622A', background:'#F4622A', color:'#fff', cursor:'pointer', fontFamily:'inherit', opacity:submitting||hasPending?.6:1 }}>
-          {submitting?<><Spinner size={12} color="#fff"/> Submitting…</>:hasPending?<><Spinner size={12} color="#fff"/> Generating…</>:'✦ Generate all poses'}
-        </button>
+      {/* Tab switcher */}
+      <div style={{ display:'flex', gap:0, marginBottom:16, background:'#F7F6F4', borderRadius:9, padding:3, width:'fit-content' }}>
+        {[['generate','✦ LIA poses'],['tryon','👗 Try on me']].map(([t,l])=>(
+          <button key={t} onClick={()=>setPoseTab(t)}
+            style={{ padding:'6px 16px', fontSize:12, fontWeight:500, borderRadius:7, border:'none', cursor:'pointer', fontFamily:'inherit', background:poseTab===t?'#fff':'transparent', color:poseTab===t?'#111':'#888', boxShadow:poseTab===t?'0 1px 4px rgba(0,0,0,.1)':'none' }}>
+            {l}
+          </button>
+        ))}
       </div>
-      <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:10 }}>
-        {POSE_LABELS.map(p => {
-          const isPending = p.key in pendingPoses
-          const isDone    = !!poses[p.key]
-          return (
-            <div key={p.key} style={{ borderRadius:10, overflow:'hidden', border:`1px solid ${isDone?'#E8E6E2':'#F0EEE9'}`, background:'#FAFAFA', position:'relative' }}>
+
+      {poseTab === 'generate' && <>
+        <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', marginBottom:12, gap:12, flexWrap:'wrap' }}>
+          <div>
+            <div style={{ fontSize:13, fontWeight:600, color:'#111' }}>LIA model poses</div>
+            <div style={{ fontSize:12, color:'#888', marginTop:2 }}>{garment.gender==='male'?'Male':'Female'} model · Select poses to generate</div>
+            {hasPending && <div style={{ fontSize:11, color:'#F4622A', marginTop:4, display:'flex', alignItems:'center', gap:5 }}><Spinner size={11} color="#F4622A"/> Generating — safe to switch screens</div>}
+          </div>
+          <div style={{ display:'flex', gap:7, flexWrap:'wrap' }}>
+            <button onClick={()=>setSelPoses(POSE_LABELS.map(p=>p.key))} style={{ fontSize:11, padding:'4px 10px', borderRadius:6, border:'1px solid #E2E0DC', background:'#fff', cursor:'pointer', fontFamily:'inherit' }}>All 8</button>
+            <button onClick={()=>setSelPoses([])} style={{ fontSize:11, padding:'4px 10px', borderRadius:6, border:'1px solid #E2E0DC', background:'#fff', cursor:'pointer', fontFamily:'inherit' }}>None</button>
+            <button onClick={()=>handleGenerate(null)} disabled={submitting||hasPending||!selPoses.length}
+              style={{ display:'inline-flex', alignItems:'center', gap:5, padding:'6px 14px', fontSize:12, fontWeight:500, borderRadius:8, border:'1px solid #F4622A', background:'#F4622A', color:'#fff', cursor:'pointer', fontFamily:'inherit', opacity:!selPoses.length||submitting||hasPending?.5:1 }}>
+              {submitting?<><Spinner size={12} color="#fff"/> Submitting…</>:hasPending?<><Spinner size={12} color="#fff"/> Generating…</>:`✦ Generate ${selPoses.length} pose${selPoses.length!==1?'s':''}`}
+            </button>
+          </div>
+        </div>
+
+        {/* Pose selector grid */}
+        <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:8, marginBottom:14 }}>
+          {POSE_LABELS.map(p => {
+            const isPending = p.key in pendingPoses
+            const isDone    = !!poses[p.key]
+            const isSel     = selPoses.includes(p.key)
+            return (
+              <div key={p.key} style={{ borderRadius:10, overflow:'hidden', border:`2px solid ${isSel&&!isDone?'#F4622A':isDone?'#E8E6E2':'#F0EEE9'}`, background:isSel&&!isDone?'#FEF8F6':'#FAFAFA', position:'relative', cursor:'pointer' }}
+                onClick={()=>!isDone&&!isPending&&togglePose(p.key)}>
+                {isDone ? (
+                  <>
+                    <img src={poses[p.key]} alt={p.label} style={{ width:'100%', aspectRatio:'3/4', objectFit:'cover', display:'block' }}/>
+                    <div style={{ position:'absolute', bottom:0, left:0, right:0, padding:'5px 7px', background:'linear-gradient(to top,rgba(0,0,0,.65),transparent)', display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+                      <span style={{ fontSize:10, color:'#fff', fontWeight:500 }}>{p.label}</span>
+                      <button onClick={e=>{e.stopPropagation();handleGenerate(p.key)}} disabled={submitting||isPending}
+                        style={{ fontSize:9, padding:'2px 6px', background:'rgba(255,255,255,.2)', border:'none', borderRadius:4, color:'#fff', cursor:'pointer', fontFamily:'inherit' }}>
+                        {isPending?'…':'Redo'}
+                      </button>
+                    </div>
+                  </>
+                ) : (
+                  <div style={{ aspectRatio:'3/4', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:4 }}>
+                    {isPending ? <><Spinner size={18} color="#F4622A"/><div style={{ fontSize:9, color:'#aaa', textAlign:'center' }}>Generating…</div></>
+                      : <>
+                          <div style={{ fontSize:20, opacity:.3 }}>{p.icon}</div>
+                          <div style={{ fontSize:9, color:'#bbb', textAlign:'center' }}>{p.label}</div>
+                          <div style={{ fontSize:9, color: isSel?'#F4622A':'#ccc', fontWeight:isSel?600:400 }}>{isSel?'✓ Selected':'tap to select'}</div>
+                        </>}
+                  </div>
+                )}
+              </div>
+            )
+          })}
+        </div>
+        {hasPoses && !hasPending && (
+          <div style={{ fontSize:12, color:'#888', display:'flex', alignItems:'center', gap:6 }}>
+            <span style={{ width:7, height:7, borderRadius:'50%', background:'#0D6B3A', display:'inline-block' }}/>
+            Poses visible on portfolio website
+          </div>
+        )}
+      </>}
+
+      {poseTab === 'tryon' && (
+        <div>
+          <div style={{ fontSize:13, fontWeight:600, color:'#111', marginBottom:4 }}>Virtual try-on</div>
+          <div style={{ fontSize:12, color:'#888', lineHeight:1.6, marginBottom:14 }}>
+            Upload a photo of the customer or learner — LIA will place this garment on them.
+          </div>
+          <div style={{ background:'#F7F6F4', borderRadius:10, padding:'12px 14px', marginBottom:14, fontSize:12, color:'#666', lineHeight:1.7 }}>
+            <div style={{ fontWeight:600, marginBottom:4, color:'#111' }}>📸 Photo guidelines for best results</div>
+            <div>✓ Full body or at least waist-up shot</div>
+            <div>✓ Plain or simple background</div>
+            <div>✓ Facing forward, standing straight</div>
+            <div>✓ Good lighting, no heavy shadows</div>
+            <div>✗ Avoid busy patterns in clothing</div>
+          </div>
+
+          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12, marginBottom:14 }}>
+            {/* Photo upload */}
+            <div>
+              <div style={{ fontSize:11, color:'#aaa', marginBottom:6 }}>Person photo</div>
+              <div onClick={()=>tryonRef.current?.click()}
+                style={{ border:`2px dashed ${tryonImg?'#F4622A':'#E2E0DC'}`, borderRadius:10, aspectRatio:'3/4', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:6, cursor:'pointer', overflow:'hidden', background:'#FAFAFA' }}>
+                {tryonImg
+                  ? <img src={tryonImg} alt="person" style={{ width:'100%', height:'100%', objectFit:'cover' }}/>
+                  : <>
+                      <div style={{ fontSize:24, opacity:.3 }}>👤</div>
+                      <div style={{ fontSize:11, color:'#bbb', textAlign:'center' }}>Upload photo</div>
+                    </>}
+              </div>
+              <input ref={tryonRef} type="file" accept="image/*" style={{ display:'none' }} onChange={e=>{if(e.target.files[0])handleTryonUpload(e.target.files[0]);e.target.value=''}}/>
+            </div>
+            {/* Result */}
+            <div>
+              <div style={{ fontSize:11, color:'#aaa', marginBottom:6 }}>Try-on result</div>
+              <div style={{ border:'1px solid #E2E0DC', borderRadius:10, aspectRatio:'3/4', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:6, overflow:'hidden', background:'#FAFAFA' }}>
+                {tryonResult
+                  ? <img src={tryonResult} alt="try-on result" style={{ width:'100%', height:'100%', objectFit:'cover' }}/>
+                  : tryonLoading
+                    ? <><Spinner size={24} color="#F4622A"/><div style={{ fontSize:11, color:'#aaa', textAlign:'center' }}>Generating…<br/>30-120 seconds</div></>
+                    : <><div style={{ fontSize:24, opacity:.2 }}>✦</div><div style={{ fontSize:11, color:'#ccc', textAlign:'center' }}>Result appears here</div></>}
+              </div>
+            </div>
+          </div>
+
+          <div style={{ display:'flex', gap:8 }}>
+            <button onClick={handleTryon} disabled={!tryonImg||tryonLoading}
+              style={{ flex:1, display:'inline-flex', alignItems:'center', justifyContent:'center', gap:6, padding:'10px', fontSize:13, fontWeight:600, borderRadius:10, border:'none', background:'#F4622A', color:'#fff', cursor:'pointer', fontFamily:'inherit', opacity:!tryonImg||tryonLoading?.5:1 }}>
+              {tryonLoading?<><Spinner size={14} color="#fff"/> Generating try-on…</>:'✦ Generate try-on'}
+            </button>
+            {tryonResult && (
+              <a href={tryonResult} download="try-on-result.png" style={{ padding:'10px 16px', fontSize:12, fontWeight:500, borderRadius:10, border:'1px solid #E2E0DC', background:'#fff', color:'#333', textDecoration:'none', display:'inline-flex', alignItems:'center' }}>
+                ↓ Download
+              </a>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
               {isDone ? (
                 <>
                   <img src={poses[p.key]} alt={p.label} style={{ width:'100%', aspectRatio:'3/4', objectFit:'cover', display:'block' }}/>
@@ -646,33 +982,236 @@ function PoseSection({ garment, onUpdate, toast }) {
                     <button onClick={()=>handleGenerate(p.key)} disabled={submitting||isPending}
                       style={{ fontSize:9, padding:'2px 6px', background:'rgba(255,255,255,.2)', border:'none', borderRadius:4, color:'#fff', cursor:'pointer', fontFamily:'inherit' }}>
                       {isPending?'…':'Redo'}
-                    </button>
-                  </div>
-                </>
-              ) : (
-                <div style={{ aspectRatio:'3/4', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:6, padding:8 }}>
-                  {isPending ? (
-                    <><Spinner size={20} color="#F4622A"/><div style={{ fontSize:10, color:'#aaa', textAlign:'center', lineHeight:1.4 }}>Generating…<br/>safe to switch</div></>
-                  ) : (
-                    <>
-                      <div style={{ fontSize:22, opacity:.25 }}>{p.icon}</div>
-                      <div style={{ fontSize:10, color:'#bbb', textAlign:'center' }}>{p.label}</div>
-                      <button onClick={()=>handleGenerate(p.key)} disabled={submitting}
-                        style={{ fontSize:10, padding:'4px 8px', background:'#F4622A', border:'none', borderRadius:5, color:'#fff', cursor:'pointer', fontFamily:'inherit', marginTop:2 }}>Generate</button>
-                    </>
-                  )}
-                </div>
-              )}
-            </div>
-          )
-        })}
+// ── Password Manager ──────────────────────────────────────────
+function PasswordManager({ learner, toast }) {
+  const [tempPass,   setTempPass]   = useState(null)
+  const [sending,    setSending]    = useState(false)
+  const [generating, setGenerating] = useState(false)
+  const [copied,     setCopied]     = useState(false)
+
+  function makeTempPassword() {
+    const chars = 'ABCDEFGHJKMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789'
+    const special = '@#!'
+    let pass = ''
+    for (let i = 0; i < 6; i++) pass += chars[Math.floor(Math.random() * chars.length)]
+    pass += special[Math.floor(Math.random() * special.length)]
+    pass += Math.floor(Math.random() * 90 + 10)
+    return pass.split('').sort(() => Math.random() - .5).join('')
+  }
+
+  async function handleSendReset() {
+    setSending(true)
+    const { error } = await supabase.auth.resetPasswordForEmail(learner.email, {
+      redirectTo: `${window.location.origin}/login`
+    })
+    setSending(false)
+    if (error) toast(error.message, 'error')
+    else toast(`Password reset email sent to ${learner.email} ✓`, 'success')
+  }
+
+  async function handleGenTemp() {
+    setGenerating(true)
+    const pass = makeTempPassword()
+    // Update password via Supabase admin (uses service role via our API)
+    const res = await fetch('/api/set-temp-password', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: learner.email, password: pass }),
+    })
+    const data = await res.json()
+    setGenerating(false)
+    if (data.error) { toast(data.error, 'error'); return }
+    setTempPass(pass)
+    toast('Temporary password set ✓', 'success')
+  }
+
+  async function copyPass() {
+    await navigator.clipboard.writeText(tempPass)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
+
+  const s = { display:'inline-flex', alignItems:'center', gap:5, padding:'7px 14px', fontSize:12, fontWeight:500, borderRadius:8, border:'1px solid', cursor:'pointer', fontFamily:'inherit' }
+
+  return (
+    <div style={{ margin:'0 18px 16px', padding:'14px', background:'#F7F6F4', borderRadius:10 }}>
+      <div style={{ fontSize:12, fontWeight:600, color:'#111', marginBottom:10 }}>Password management</div>
+      <div style={{ display:'flex', gap:8, flexWrap:'wrap', marginBottom: tempPass ? 12 : 0 }}>
+        <button onClick={handleSendReset} disabled={sending}
+          style={{ ...s, background:'#fff', borderColor:'#E2E0DC', color:'#333' }}>
+          {sending ? <><Spinner size={12} color="#555"/> Sending…</> : '✉ Send reset email'}
+        </button>
+        <button onClick={handleGenTemp} disabled={generating}
+          style={{ ...s, background:'#F4622A', borderColor:'#F4622A', color:'#fff' }}>
+          {generating ? <><Spinner size={12} color="#fff"/> Generating…</> : '⚡ Generate temp password'}
+        </button>
       </div>
-      {hasPoses && !hasPending && (
-        <div style={{ marginTop:10, fontSize:12, color:'#888', display:'flex', alignItems:'center', gap:6 }}>
-          <span style={{ width:7, height:7, borderRadius:'50%', background:'#0D6B3A', display:'inline-block' }}/>
-          Poses visible on portfolio website
+
+      {tempPass && (
+        <div style={{ marginTop:10, padding:'10px 14px', background:'#fff', border:'1px solid #E2E0DC', borderRadius:8 }}>
+          <div style={{ fontSize:11, color:'#888', marginBottom:6 }}>
+            Temp password for <strong>{learner.name}</strong> — share via WhatsApp or call. Ask them to change it after login.
+          </div>
+          <div style={{ display:'flex', alignItems:'center', gap:10 }}>
+            <code style={{ fontSize:18, fontWeight:700, color:'#111', letterSpacing:'.1em', fontFamily:'monospace', flex:1 }}>{tempPass}</code>
+            <button onClick={copyPass} style={{ ...s, background: copied?'#E6F4EC':'#fff', borderColor: copied?'#52B27A':'#E2E0DC', color: copied?'#0D6B3A':'#555', padding:'5px 12px' }}>
+              {copied ? '✓ Copied' : 'Copy'}
+            </button>
+            <a href={`https://wa.me/${learner.phone?.replace(/\D/g,'')}?text=${encodeURIComponent(`Hi ${learner.name.split(' ')[0]}, your Skillinabox portfolio login:\nEmail: ${learner.email}\nTemp password: ${tempPass}\n\nPlease change your password after logging in at ${window.location.origin}/login`)}`}
+              target="_blank" rel="noreferrer"
+              style={{ ...s, textDecoration:'none', background:'#E6F4EC', borderColor:'#52B27A', color:'#0D6B3A' }}>
+              WhatsApp
+            </a>
+          </div>
+          <div style={{ marginTop:8, fontSize:11, color:'#F4622A' }}>⚠ This password is shown once — save it now</div>
         </div>
       )}
+    </div>
+  )
+}
+
+// ── Delete Learner ────────────────────────────────────────────
+function DeleteLearner({ learner, toast, onDeleted }) {
+  const [confirm, setConfirm] = useState(false)
+  const [deleting, setDeleting] = useState(false)
+  const [typed, setTyped] = useState('')
+
+  async function handleDelete() {
+    if (typed !== learner.name) { toast('Name does not match', 'error'); return }
+    setDeleting(true)
+    try {
+      const res = await fetch('/api/delete-learner', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ learner_id: learner.id, learner_email: learner.email }),
+      })
+      const data = await res.json()
+      if (data.error) throw new Error(data.error)
+      toast(`${learner.name} and all their data deleted`, 'success')
+      onDeleted()
+    } catch(err) {
+      toast(err.message || 'Delete failed', 'error')
+      setDeleting(false)
+    }
+  }
+
+  const s = { display:'inline-flex', alignItems:'center', gap:5, padding:'7px 14px', fontSize:12, fontWeight:500, borderRadius:8, border:'1px solid', cursor:'pointer', fontFamily:'inherit' }
+
+  if (!confirm) return (
+    <div style={{ margin:'0 18px 18px', borderTop:'1px solid #FEE2E2', paddingTop:14 }}>
+      <button onClick={()=>setConfirm(true)}
+        style={{ ...s, background:'transparent', borderColor:'#FCA5A5', color:'#991B1B', fontSize:12 }}>
+        ✕ Delete learner & all data
+      </button>
+    </div>
+  )
+
+  return (
+    <div style={{ margin:'0 18px 18px', background:'#FEF2F2', border:'1px solid #FCA5A5', borderRadius:10, padding:'14px 16px' }}>
+      <div style={{ fontSize:13, fontWeight:600, color:'#991B1B', marginBottom:6 }}>Delete {learner.name}?</div>
+      <div style={{ fontSize:12, color:'#B91C1C', lineHeight:1.6, marginBottom:12 }}>
+        This permanently deletes all garments, photos, collections, enquiries, subscriptions and their login account. <strong>This cannot be undone.</strong>
+      </div>
+      <div style={{ marginBottom:10 }}>
+        <label style={{ fontSize:11, color:'#991B1B', display:'block', marginBottom:5 }}>
+          Type <strong>{learner.name}</strong> to confirm
+        </label>
+        <input value={typed} onChange={e=>setTyped(e.target.value)} placeholder={learner.name}
+          style={{ width:'100%', fontSize:13, padding:'8px 10px', border:'1px solid #FCA5A5', borderRadius:8, outline:'none', fontFamily:'inherit', background:'#fff' }}/>
+      </div>
+      <div style={{ display:'flex', gap:8 }}>
+        <button onClick={()=>{ setConfirm(false); setTyped('') }} style={{ ...s, background:'#fff', borderColor:'#E2E0DC', color:'#555' }}>Cancel</button>
+        <button onClick={handleDelete} disabled={deleting || typed !== learner.name}
+          style={{ ...s, background: typed===learner.name?'#DC2626':'#FCA5A5', borderColor:'transparent', color:'#fff', opacity: typed!==learner.name?.6:1 }}>
+          {deleting ? <><Spinner size={12} color="#fff"/> Deleting…</> : 'Yes, delete everything'}
+        </button>
+      </div>
+    </div>
+  )
+}
+
+// ── Plans & Offers Management Modal ──────────────────────────
+function PlansModal({ onClose, toast }) {
+  const [plans,   setPlans]   = useState([])
+  const [loading, setLoading] = useState(true)
+  const [saving,  setSaving]  = useState(null)
+
+  useEffect(() => { load() }, [])
+
+  async function load() {
+    setLoading(true)
+    const { data } = await supabase.from('subscription_plans').select('*').order('display_order')
+    setPlans(data || [])
+    setLoading(false)
+  }
+
+  async function savePlan(id, patch) {
+    setSaving(id)
+    await supabase.from('subscription_plans').update(patch).eq('id', id)
+    setPlans(ps => ps.map(p => p.id === id ? { ...p, ...patch } : p))
+    setSaving(null)
+    toast('Saved ✓', 'success')
+  }
+
+  const inp = { fontSize:13, padding:'6px 10px', border:'1px solid #E2E0DC', borderRadius:7, outline:'none', fontFamily:'inherit', width:'100%' }
+
+  return (
+    <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,.6)', zIndex:200, display:'flex', alignItems:'center', justifyContent:'center', padding:24 }}
+      onClick={e=>e.target===e.currentTarget&&onClose()}>
+      <div style={{ background:'#fff', borderRadius:16, width:'100%', maxWidth:720, maxHeight:'85vh', overflow:'auto', boxShadow:'0 24px 80px rgba(0,0,0,.25)' }}>
+        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'16px 20px', borderBottom:'1px solid #F0EEE9', position:'sticky', top:0, background:'#fff', zIndex:1 }}>
+          <div>
+            <div style={{ fontSize:15, fontWeight:600 }}>Plans & offers</div>
+            <div style={{ fontSize:12, color:'#888', marginTop:2 }}>Edit pricing, limits and descriptions — changes apply immediately</div>
+          </div>
+          <button onClick={onClose} style={{ background:'none', border:'none', fontSize:22, cursor:'pointer', color:'#aaa', lineHeight:1 }}>×</button>
+        </div>
+
+        {loading ? <div style={{ padding:40, textAlign:'center' }}><Spinner color="#F4622A"/></div> : (
+          <div style={{ padding:20, display:'flex', flexDirection:'column', gap:16 }}>
+            {plans.map(plan => (
+              <div key={plan.id} style={{ border:'1px solid #E8E6E2', borderRadius:12, overflow:'hidden' }}>
+                <div style={{ padding:'10px 14px', background:plan.is_active?'#F7F6F4':'#FEE2E2', display:'flex', alignItems:'center', gap:10 }}>
+                  <div style={{ fontSize:14, fontWeight:600, flex:1 }}>{plan.name}</div>
+                  <div style={{ display:'flex', alignItems:'center', gap:6 }}>
+                    <span style={{ fontSize:12, color:'#888' }}>Active</span>
+                    <div onClick={()=>savePlan(plan.id,{is_active:!plan.is_active})}
+                      style={{ width:36, height:20, borderRadius:99, background:plan.is_active?'#F4622A':'#D1D5DB', cursor:'pointer', position:'relative', transition:'background .2s' }}>
+                      <div style={{ position:'absolute', top:2, left:plan.is_active?18:2, width:16, height:16, borderRadius:'50%', background:'#fff', transition:'left .2s' }}/>
+                    </div>
+                  </div>
+                </div>
+                <div style={{ padding:'14px', display:'grid', gridTemplateColumns:'1fr 1fr 1fr 1fr', gap:10 }}>
+                  {[
+                    ['Price (₹)', 'price_inr', 'number'],
+                    ['Duration (months)', 'duration_months', 'number'],
+                    ['Free bonus months', 'free_months', 'number'],
+                    ['Garment limit/month (-1=∞)', 'garment_limit', 'number'],
+                    ['LIA pose limit/month (-1=∞)', 'pose_limit', 'number'],
+                  ].map(([label, field, type]) => (
+                    <div key={field}>
+                      <label style={{ fontSize:11, color:'#aaa', display:'block', marginBottom:4 }}>{label}</label>
+                      <input type={type} style={inp} value={plan[field]}
+                        onChange={e=>setPlans(ps=>ps.map(p=>p.id===plan.id?{...p,[field]:type==='number'?Number(e.target.value):e.target.value}:p))}
+                        onBlur={()=>savePlan(plan.id,{[field]:plan[field]})}/>
+                    </div>
+                  ))}
+                  <div style={{ gridColumn:'1/-1' }}>
+                    <label style={{ fontSize:11, color:'#aaa', display:'block', marginBottom:4 }}>Description (shown to learners)</label>
+                    <input style={inp} value={plan.description}
+                      onChange={e=>setPlans(ps=>ps.map(p=>p.id===plan.id?{...p,description:e.target.value}:p))}
+                      onBlur={()=>savePlan(plan.id,{description:plan.description})}/>
+                  </div>
+                </div>
+                {saving===plan.id && <div style={{ padding:'6px 14px', fontSize:11, color:'#F4622A', background:'#FEF8F6', borderTop:'1px solid #F0EEE9' }}>Saving…</div>}
+              </div>
+            ))}
+            <div style={{ fontSize:12, color:'#aaa', padding:'10px 14px', background:'#F7F6F4', borderRadius:9 }}>
+              Changes are saved automatically when you click away from each field. Pricing changes apply to new subscriptions only — existing subscribers keep their current terms.
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   )
 }
