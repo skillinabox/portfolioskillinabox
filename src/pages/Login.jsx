@@ -29,8 +29,8 @@ export default function Login() {
         setSignup(false)
       } else {
         const { error } = await supabase.auth.signInWithPassword({ email, password: pass })
-if (error) throw error
-window.location.href = mode === 'admin' ? '/admin' : '/dashboard'
+        if (error) throw error
+        // Navigation handled by auth state change in App.jsx
       }
     } catch(e) {
       setErr(e.message || 'Something went wrong')
