@@ -34,7 +34,6 @@ export default function Learner() {
   const [editForm,     setEditForm]     = useState({})
   const [activeSub,    setActiveSub]    = useState(null)
   const [usage,        setUsage]        = useState({ garments_used:0, poses_used:0 })
-  const [showUpgrade,  setShowUpgrade]  = useState(false)
   const [showUpgrade,  setShowUpgrade]  = useState(null) // { feature, used, limit }
 
   const fileRef  = useRef()
