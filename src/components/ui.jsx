@@ -38,7 +38,7 @@ export function StatusBadge({ status }) {
     'in-progress':['In progress', 'b-amber'],
     new:          ['Not started', 'b-gray'],
     tagged:       ['Tagged',      'b-green'],
-    tagging:      ['AI tagging…', 'b-purple'],
+    tagging:      ['LIA tagging…', 'b-purple'],
     uploading:    ['Uploading…',  'b-gray'],
     ready:        ['Poses ready', 'b-amber'],
     order:        ['Order',       'b-orange'],
@@ -92,7 +92,7 @@ export function FieldRow({ label, value, onChange, aiTagged=false, type='text' }
       <span style={{ fontSize:12, color:'var(--mid)', width:88, flexShrink:0 }}>{label}</span>
       <input className="input" type={type} style={{ flex:1, fontSize:13, padding:'5px 9px' }}
         value={value||''} placeholder={label} onChange={e=>onChange(e.target.value)} />
-      {aiTagged && <span className="badge b-orange" style={{ flexShrink:0, fontSize:10 }}>AI</span>}
+      {aiTagged && <span className="badge b-orange" style={{ flexShrink:0, fontSize:10 }}>LIA</span>}
     </div>
   )
 }

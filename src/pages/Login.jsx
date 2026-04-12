@@ -68,7 +68,7 @@ export default function Login() {
             Showcase.<br/><em style={{ color:'var(--orange)' }}>Sell.</em><br/>Succeed.
           </h1>
           <p style={{ fontSize:14, color:'#777', lineHeight:1.8, maxWidth:320 }}>
-            The official portfolio platform for Skillinabox graduates. Upload your garments, get AI-powered imagery, and publish your brand to the world.
+            The official portfolio platform for Skillinabox graduates. Upload your garments, get LIA-powered imagery, and publish your brand to the world.
           </p>
         </div>
 
