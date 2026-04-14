@@ -9,10 +9,11 @@ export default function Portfolio() {
   const { slug, learnerId } = useParams()
   const location = useLocation()
   const isPreview = !!learnerId || location.pathname.includes('/preview/')
-  const [lightbox,   setLightbox]   = useState(null) // { images: [], index: 0 }
+  const [lightbox,   setLightbox]   = useState(null)
   const [learner,    setLearner]    = useState(null)
   const [garments,   setGarments]   = useState([])
   const [colls,      setColls]      = useState([])
+  const [reviews,    setReviews]    = useState([])
   const [loading,    setLoading]    = useState(true)
   const [enquiry,    setEnquiry]    = useState(null) // garment or 'general'
   const [step,       setStep]       = useState(1)    // 1=form, 2=measurements, 3=done
@@ -34,11 +35,12 @@ export default function Portfolio() {
         l = data
       }
       if (!l) { setLoading(false); return }
-      const [{ data:g }, { data:c }] = await Promise.all([
+      const [{ data:g }, { data:c }, { data:r }] = await Promise.all([
         supabase.from('garments').select('*').eq('learner_id',l.id).eq('status','published').order('created_at'),
         supabase.from('collections').select('*').eq('learner_id',l.id).order('display_order'),
+        supabase.from('reviews').select('*').eq('learner_id',l.id).eq('approved',true).order('created_at',{ascending:false}),
       ])
-      setLearner(l); setGarments(g||[]); setColls(c||[]); setLoading(false)
+      setLearner(l); setGarments(g||[]); setColls(c||[]); setReviews(r||[]); setLoading(false)
     }
     load()
   }, [slug])
@@ -118,7 +120,7 @@ export default function Portfolio() {
   const expertise = learner.expertise ? learner.expertise.split(',').map(s=>s.trim()).filter(Boolean) : []
   const G = '#F4622A'
 
-  const NAV = ['home','collection','about','expertise','contact']
+  const NAV = ['home','collection','about','expertise','reviews','contact']
 
   return (
     <div style={{ fontFamily:"'DM Sans',system-ui,sans-serif", minHeight:'100vh' }}>
@@ -153,20 +155,24 @@ export default function Portfolio() {
       {/* NAV */}
       <nav style={{ position:'fixed', top: isPreview ? 37 : 0, left:0, right:0, zIndex:100, background:'rgba(10,10,10,.95)', backdropFilter:'blur(16px)', borderBottom:'1px solid rgba(255,255,255,.05)' }}>
         <div style={{ maxWidth:1100, margin:'0 auto', padding:'0 24px', display:'flex', alignItems:'center', justifyContent:'space-between', height:58 }}>
-          <div style={{ display:'flex', alignItems:'center', gap:10 }}>
-            {learner.logo_url
-              ? <img src={learner.logo_url} alt="logo" style={{ height:32, maxWidth:80, objectFit:'contain' }}/>
-              : <>
-                  <div style={{ display:'flex', flexDirection:'column', gap:2.5 }}>
-                    <div style={{ width:18, height:2.5, borderRadius:2, background:'#00B4D8' }}/>
-                    <div style={{ display:'flex', gap:2 }}><div style={{ width:4, height:2.5, borderRadius:2, background:'#F4A61A' }}/><div style={{ width:14, height:2.5, borderRadius:2, background:'#777' }}/></div>
-                    <div style={{ width:18, height:2.5, borderRadius:2, background:G }}/>
-                  </div>
-                  <div>
-                    <div style={{ fontFamily:"'DM Serif Display',serif", fontSize:15, color:'#fff', lineHeight:1.1 }}>{learner.brand||learner.name}</div>
-                    <div style={{ fontSize:9, color:'#444', letterSpacing:'.07em', marginTop:2 }}>A SKILLINABOX INITIATIVE</div>
-                  </div>
-                </>}
+          <div style={{ display:'flex', alignItems:'center', gap:12 }}>
+            {learner.logo_url ? (
+              <>
+                <img src={learner.logo_url} alt="logo" style={{ height:38, maxWidth:120, objectFit:'contain' }}/>
+                <div style={{ width:1, height:24, background:'rgba(255,255,255,.1)' }}/>
+              </>
+            ) : null}
+            <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+              <div style={{ display:'flex', flexDirection:'column', gap:2.5 }}>
+                <div style={{ width:18, height:2.5, borderRadius:2, background:'#00B4D8' }}/>
+                <div style={{ display:'flex', gap:2 }}><div style={{ width:4, height:2.5, borderRadius:2, background:'#F4A61A' }}/><div style={{ width:14, height:2.5, borderRadius:2, background:'#777' }}/></div>
+                <div style={{ width:18, height:2.5, borderRadius:2, background:G }}/>
+              </div>
+              <div>
+                <div style={{ fontFamily:"'DM Serif Display',serif", fontSize:15, color:'#fff', lineHeight:1.1 }}>{learner.brand||learner.name}</div>
+                <div style={{ fontSize:9, color:'#444', letterSpacing:'.07em', marginTop:2 }}>A SKILLINABOX INITIATIVE</div>
+              </div>
+            </div>
           </div>
           <div style={{ display:'flex', gap:24, alignItems:'center' }}>
             {NAV.map(n=><button key={n} className={`nl ${activeNav===n?'on':''}`} onClick={()=>scrollTo(n)}>{n.charAt(0).toUpperCase()+n.slice(1)}</button>)}
@@ -234,11 +240,17 @@ export default function Portfolio() {
               </div>
               {col.description&&<p style={{ fontSize:14, color:'#777', lineHeight:1.7, marginBottom:24, maxWidth:600, fontStyle:'italic' }}>{col.description}</p>}
               <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(270px,1fr))', gap:24 }}>
-                {items.map(g=>(
-                  <div key={g.id} className="gc" onClick={()=>openEnquiry(g)}>
-                    <div style={{ position:'relative', paddingBottom:'118%', background:'#F0EDEA' }}>
+                {items.map(g=>{
+                  const ALL_POSE_KEYS = ['front','back','left','right','walking','sitting','closeup','outdoor','side'] // 'side' for legacy
+                  const poseUrls = g.poses ? ALL_POSE_KEYS.filter(k=>g.poses[k]).map(k=>g.poses[k]) : []
+                  const allImgs = [g.image_url, ...poseUrls].filter(Boolean)
+                  return (
+                  <div key={g.id} className="gc">
+                    <div onClick={()=>allImgs.length>0&&setLightbox({ images:allImgs, index:0 })}
+                      style={{ position:'relative', paddingBottom:'118%', background:'#F0EDEA', cursor: allImgs.length>0?'pointer':'default' }}>
                       {g.image_url ? <img src={g.image_url} alt={g.name} style={{ position:'absolute', inset:0, width:'100%', height:'100%', objectFit:'cover' }}/> : <div style={{ position:'absolute', inset:0, display:'flex', alignItems:'center', justifyContent:'center', fontSize:60, color:'#D0CBC4' }}>{g.name?.[0]||'?'}</div>}
-                      <div className="go">Enquire about this piece →</div>
+                      {allImgs.length > 1 && <div style={{ position:'absolute', top:10, right:10, background:'rgba(0,0,0,.55)', color:'#fff', fontSize:11, fontWeight:600, padding:'3px 9px', borderRadius:99 }}>1/{allImgs.length} ↗</div>}
+                      <div className="go">View all photos →</div>
                     </div>
                     <div style={{ padding:'18px 20px 22px' }}>
                       <div style={{ fontSize:15, fontWeight:600, color:'#111', marginBottom:5, lineHeight:1.3 }}>{g.name}</div>
@@ -252,25 +264,33 @@ export default function Portfolio() {
                       </div>
                       {g.occasion&&<div style={{ fontSize:12, color:'#bbb', marginTop:8 }}>For: {g.occasion}</div>}
                       {g.poses && Object.values(g.poses).some(Boolean) && (() => {
-                        const poseImgs = ['front','side','walking','sitting'].filter(k=>g.poses[k]).map(k=>({ key:k, url:g.poses[k] }))
+                        const ALL_POSE_KEYS = ['front','back','left','right','walking','sitting','closeup','outdoor','side']
+                        const poseImgs = ALL_POSE_KEYS.filter(k=>g.poses[k]).map(k=>({ key:k, url:g.poses[k] }))
+                        const allImgsLocal = [g.image_url, ...poseImgs.map(p=>p.url)].filter(Boolean)
                         return (
                           <div style={{ marginTop:12, paddingTop:12, borderTop:'1px solid #F0EEE9' }}>
                             <div style={{ fontSize:11, color:'#aaa', marginBottom:6 }}>Model views · <span style={{ color:'#F4622A' }}>tap to view</span></div>
-                            <div style={{ display:'flex', gap:5 }}>
+                            <div style={{ display:'flex', gap:5, flexWrap:'wrap' }}>
                               {poseImgs.map((p, i) => (
-                                <div key={p.key} onClick={()=>setLightbox({ images: poseImgs.map(x=>x.url), index: i })}
-                                  style={{ flex:1, borderRadius:7, overflow:'hidden', aspectRatio:'3/4', cursor:'pointer', position:'relative' }}>
-                                  <img src={p.url} alt={p.key} style={{ width:'100%', height:'100%', objectFit:'cover', display:'block', transition:'transform .2s' }}/>
-                                  <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0)', transition:'background .2s' }}/>
+                                <div key={p.key} onClick={e=>{e.stopPropagation();setLightbox({ images:allImgsLocal, index:i+1 })}}
+                                  style={{ width:'calc(25% - 4px)', borderRadius:7, overflow:'hidden', aspectRatio:'3/4', cursor:'pointer', position:'relative', flexShrink:0 }}>
+                                  <img src={p.url} alt={p.key} style={{ width:'100%', height:'100%', objectFit:'cover', display:'block' }}/>
                                 </div>
                               ))}
                             </div>
                           </div>
                         )
                       })()}
+                      <button onClick={e=>{e.stopPropagation();openEnquiry(g)}}
+                        style={{ marginTop:14, width:'100%', padding:'11px', fontSize:13, fontWeight:600, background:'#F4622A', border:'none', borderRadius:9, color:'#fff', cursor:'pointer', fontFamily:'inherit' }}>
+                        Enquire about this piece →
+                      </button>
                     </div>
                   </div>
-                ))}
+                )})}
+              </div>
+            </div>
+          ))}
               </div>
             </div>
           ))}
@@ -364,6 +384,36 @@ export default function Portfolio() {
               ))}
             </div>
           </div>
+        </div>
+      </section>
+
+      {/* REVIEWS */}
+      <section id="reviews" style={{ padding:'96px 24px', background:'#0A0A0A' }}>
+        <div style={{ maxWidth:1100, margin:'0 auto' }}>
+          <div style={{ textAlign:'center', marginBottom:56 }}>
+            <div style={{ fontSize:11, fontWeight:600, color:G, letterSpacing:'.12em', textTransform:'uppercase', marginBottom:12 }}>What customers say</div>
+            <h2 style={{ fontFamily:"'DM Serif Display',serif", fontSize:44, color:'#fff', marginBottom:16 }}>Reviews</h2>
+          </div>
+
+          {/* Existing reviews */}
+          {reviews.length > 0 && (
+            <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(300px,1fr))', gap:20, marginBottom:56 }}>
+              {reviews.map(r=>(
+                <div key={r.id} style={{ background:'rgba(255,255,255,.04)', border:'1px solid rgba(255,255,255,.07)', borderRadius:14, padding:'24px 22px' }}>
+                  <div style={{ display:'flex', gap:2, marginBottom:12 }}>
+                    {[1,2,3,4,5].map(s=>(
+                      <span key={s} style={{ fontSize:16, color: s<=r.rating ? G : '#333' }}>★</span>
+                    ))}
+                  </div>
+                  <p style={{ fontSize:14, color:'#888', lineHeight:1.75, marginBottom:16, fontStyle:'italic' }}>"{r.text}"</p>
+                  <div style={{ fontSize:13, fontWeight:500, color:'#ddd' }}>— {r.reviewer}</div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Leave a review form */}
+          <ReviewForm learnerId={learner.id} onSubmitted={()=>{}} G={G}/>
         </div>
       </section>
 
@@ -528,6 +578,65 @@ export default function Portfolio() {
           </div>
         </div>
       )}
+    </div>
+  )
+}
+
+function ReviewForm({ learnerId, onSubmitted, G }) {
+  const [form,      setForm]      = useState({ reviewer:'', rating:5, text:'' })
+  const [submitted, setSubmitted] = useState(false)
+  const [loading,   setLoading]   = useState(false)
+
+  async function handleSubmit(e) {
+    e.preventDefault()
+    if (!form.reviewer || !form.text) return
+    setLoading(true)
+    await supabase.from('reviews').insert({
+      learner_id: learnerId,
+      reviewer:   form.reviewer,
+      rating:     form.rating,
+      text:       form.text,
+      approved:   false,
+    })
+    setLoading(false)
+    setSubmitted(true)
+    if (onSubmitted) onSubmitted()
+  }
+
+  const inp = { width:'100%', padding:'11px 14px', fontSize:14, background:'rgba(255,255,255,.06)', border:'1px solid rgba(255,255,255,.1)', borderRadius:10, outline:'none', color:'#fff', fontFamily:'inherit', transition:'border-color .15s' }
+
+  if (submitted) return (
+    <div style={{ maxWidth:480, margin:'0 auto', textAlign:'center', padding:'40px 24px', background:'rgba(255,255,255,.04)', borderRadius:16, border:'1px solid rgba(255,255,255,.07)' }}>
+      <div style={{ fontSize:36, marginBottom:12 }}>✦</div>
+      <div style={{ fontFamily:"'DM Serif Display',serif", fontSize:22, color:'#fff', marginBottom:8 }}>Thank you!</div>
+      <p style={{ fontSize:14, color:'#666' }}>Your review has been submitted and will appear after approval.</p>
+    </div>
+  )
+
+  return (
+    <div style={{ maxWidth:560, margin:'0 auto' }}>
+      <div style={{ textAlign:'center', marginBottom:28 }}>
+        <div style={{ fontSize:15, fontWeight:500, color:'#fff', marginBottom:6 }}>Leave a review</div>
+        <p style={{ fontSize:13, color:'#555' }}>Share your experience working with this designer</p>
+      </div>
+      <form onSubmit={handleSubmit} style={{ display:'flex', flexDirection:'column', gap:14 }}>
+        <input value={form.reviewer} onChange={e=>setForm(p=>({...p,reviewer:e.target.value}))} placeholder="Your name *" required style={inp}/>
+        <div>
+          <div style={{ fontSize:12, color:'#666', marginBottom:8 }}>Rating</div>
+          <div style={{ display:'flex', gap:6 }}>
+            {[1,2,3,4,5].map(s=>(
+              <button type="button" key={s} onClick={()=>setForm(p=>({...p,rating:s}))}
+                style={{ fontSize:28, background:'none', border:'none', cursor:'pointer', color: s<=form.rating ? G : '#333', padding:0, transition:'color .1s' }}>★</button>
+            ))}
+          </div>
+        </div>
+        <textarea value={form.text} onChange={e=>setForm(p=>({...p,text:e.target.value}))} placeholder="Share your experience with this designer *" required rows={4}
+          style={{ ...inp, resize:'vertical' }}/>
+        <button type="submit" disabled={loading}
+          style={{ padding:'14px', fontSize:14, fontWeight:600, background:G, border:'none', borderRadius:10, color:'#fff', cursor:'pointer', fontFamily:'inherit', boxShadow:`0 4px 20px rgba(244,98,42,.25)` }}>
+          {loading ? 'Submitting…' : 'Submit review →'}
+        </button>
+      </form>
     </div>
   )
 }
