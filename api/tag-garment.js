@@ -34,6 +34,18 @@ export default async function handler(req, res) {
       return res.status(200).json({ description: text })
     }
 
+    // ── Generate designer bio ─────────────────────────────────
+    if (body.gen_bio) {
+      const text = await callClaude([{ role: 'user', content: `Write a warm, professional 3-sentence bio for an Indian fashion designer named ${body.name} who runs "${body.brand || body.name}". Speciality: ${body.speciality || 'fashion design'}. Skills: ${body.skills || ''}. Expertise: ${body.expertise || ''}. They are a graduate of the Skillinabox fashion design programme. Sound authentic, aspirational, and personal. Return ONLY the bio text.` }])
+      return res.status(200).json({ description: text })
+    }
+
+    // ── Expand expertise keywords into descriptions ───────────
+    if (body.gen_expertise) {
+      const text = await callClaude([{ role: 'user', content: `You are writing for an Indian fashion designer's portfolio. Take these expertise areas: "${body.expertise || ''}" and expand each into a one-line description (15-20 words). Format as: "Area Name — description". One per line. Speciality context: ${body.speciality || 'fashion'}. Return ONLY the formatted list, nothing else.` }])
+      return res.status(200).json({ description: text })
+    }
+
     // ── Tag garment from image ────────────────────────────────
     if (!body.image_base64 || !body.mime_type) return res.status(400).json({ error: 'Missing image' })
 
