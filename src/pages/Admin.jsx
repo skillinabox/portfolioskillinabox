@@ -300,7 +300,7 @@ export default function Admin() {
 
               {/* Tabs */}
               <div style={{ display:'flex', borderTop:'1px solid #F0EEE9', padding:'0 18px' }}>
-                {[['garments',`Garments (${garments.length})`],['collections',`Collections (${collections.length})`],['enquiries',`Enquiries (${enquiries.length})`],['subscription','Subscription'],['profile','Profile']].map(([t,l])=>(
+                {[['garments',`Garments (${garments.length})`],['collections',`Collections (${collections.length})`],['enquiries',`Enquiries (${enquiries.length})`],['reviews','Reviews'],['subscription','Subscription'],['profile','Profile']].map(([t,l])=>(
                   <button key={t} onClick={()=>setTab(t)} style={{ padding:'10px 16px', fontSize:13, fontWeight:tab===t?600:400, color:tab===t?'#F4622A':'#888', background:'none', border:'none', borderBottom:tab===t?'2px solid #F4622A':'2px solid transparent', cursor:'pointer', marginBottom:-1, fontFamily:'inherit' }}>{l}</button>
                 ))}
               </div>
@@ -337,9 +337,20 @@ export default function Admin() {
                   <div style={chead}>
                     <div>
                       <div style={{ fontSize:14, fontWeight:600 }}>{garment.name||'Garment details'}</div>
-                      <div style={{ fontSize:12, color:'#888', marginTop:2 }}>{garment.ai_tagged?'AI auto-filled · all fields editable':'Fill in details'}</div>
+                      <div style={{ fontSize:12, color:'#888', marginTop:2 }}>{garment.ai_tagged?'LIA auto-filled · all fields editable':'Fill in details'}</div>
                     </div>
-                    <StatusBadge status={garment.status}/>
+                    <div style={{ display:'flex', gap:8, alignItems:'center' }}>
+                      <StatusBadge status={garment.status}/>
+                      <button onClick={async()=>{
+                        if(!confirm(`Delete "${garment.name}"? This cannot be undone.`)) return
+                        await supabase.from('garments').delete().eq('id',garment.id)
+                        mutG(gs=>gs.filter(g=>g.id!==garment.id))
+                        setSelGid(null)
+                        toast('Garment deleted','success')
+                      }} style={{ fontSize:11, padding:'4px 10px', borderRadius:6, border:'1px solid #FCA5A5', background:'transparent', color:'#991B1B', cursor:'pointer', fontFamily:'inherit' }}>
+                        Delete
+                      </button>
+                    </div>
                   </div>
                   <div style={{ display:'grid', gridTemplateColumns:garment.image_url?'160px 1fr':'1fr' }}>
                     {garment.image_url && (
@@ -513,7 +524,17 @@ export default function Admin() {
                     </div>
                   ))}
                   <div style={{ gridColumn:'1/-1' }}>
-                    <label style={{ fontSize:11, color:'#aaa', display:'block', marginBottom:4 }}>Bio</label>
+                    <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:4 }}>
+                      <label style={{ fontSize:11, color:'#aaa' }}>Bio</label>
+                      <button onClick={async()=>{
+                        const name = learner.name, brand = learner.brand, speciality = learner.speciality
+                        const res = await fetch('/api/tag-garment', { method:'POST', headers:{'Content-Type':'application/json'},
+                          body: JSON.stringify({ gen_bio: true, name, brand, speciality, skills: learner.skills, expertise: learner.expertise }) })
+                        const d = await res.json()
+                        if(d.description) updateLearner({ bio: d.description })
+                        toast('Bio written ✓','success')
+                      }} style={{ fontSize:11, padding:'3px 10px', borderRadius:6, border:'1px solid #E2E0DC', background:'#fff', cursor:'pointer', fontFamily:'inherit' }}>✦ LIA write</button>
+                    </div>
                     <textarea value={learner.bio||''} onChange={e=>updateLearner({bio:e.target.value})} rows={3}
                       style={{ width:'100%', fontSize:13, padding:'7px 10px', border:'1px solid #E2E0DC', borderRadius:8, outline:'none', resize:'vertical', fontFamily:'inherit' }}/>
                   </div>
@@ -523,9 +544,20 @@ export default function Admin() {
                       style={{ width:'100%', fontSize:13, padding:'7px 10px', border:'1px solid #E2E0DC', borderRadius:8, outline:'none', fontFamily:'inherit' }}/>
                   </div>
                   <div>
-                    <label style={{ fontSize:11, color:'#aaa', display:'block', marginBottom:4 }}>Expertise (comma separated)</label>
-                    <input value={learner.expertise||''} onChange={e=>updateLearner({expertise:e.target.value})} placeholder="Bridal Wear, Sustainable Fashion"
-                      style={{ width:'100%', fontSize:13, padding:'7px 10px', border:'1px solid #E2E0DC', borderRadius:8, outline:'none', fontFamily:'inherit' }}/>
+                    <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:4 }}>
+                      <label style={{ fontSize:11, color:'#aaa' }}>Expertise (with descriptions)</label>
+                      <button onClick={async()=>{
+                        const res = await fetch('/api/tag-garment', { method:'POST', headers:{'Content-Type':'application/json'},
+                          body: JSON.stringify({ gen_expertise: true, expertise: learner.expertise, speciality: learner.speciality }) })
+                        const d = await res.json()
+                        if(d.description) updateLearner({ expertise: d.description })
+                        toast('Expertise expanded ✓','success')
+                      }} style={{ fontSize:11, padding:'3px 10px', borderRadius:6, border:'1px solid #E2E0DC', background:'#fff', cursor:'pointer', fontFamily:'inherit' }}>✦ LIA expand</button>
+                    </div>
+                    <textarea value={learner.expertise||''} onChange={e=>updateLearner({expertise:e.target.value})} rows={2}
+                      placeholder="e.g. Bridal Wear — specialising in heavy embroidery and traditional motifs&#10;Sustainable Fashion — eco-friendly fabrics and zero-waste patterns"
+                      style={{ width:'100%', fontSize:13, padding:'7px 10px', border:'1px solid #E2E0DC', borderRadius:8, outline:'none', resize:'vertical', fontFamily:'inherit' }}/>
+                    <div style={{ fontSize:10, color:'#bbb', marginTop:3 }}>Click LIA expand to turn keywords into full descriptions · shown as expertise cards on portfolio</div>
                   </div>
                 </div>
                 <div style={{ padding:'0 18px 16px', fontSize:11, color:'#aaa' }}>
@@ -537,6 +569,7 @@ export default function Admin() {
             )}
 
             {/* ── SUBSCRIPTION TAB ── */}
+            {tab==='reviews' && <AdminReviewsTab learner={learner} toast={toast} card={card} chead={chead} btn={btn}/>}
             {tab==='subscription' && <AdminSubscriptionTab learner={learner} toast={toast} btn={btn} card={card} chead={chead}/>}
           </div>
         )}
@@ -554,6 +587,72 @@ export default function Admin() {
           </div>
         </Modal>
       )}
+    </div>
+  )
+}
+
+// ── Admin Reviews Tab ─────────────────────────────────────────
+function AdminReviewsTab({ learner, toast, card, chead, btn }) {
+  const [reviews, setReviews] = useState([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => { load() }, [learner.id])
+
+  async function load() {
+    setLoading(true)
+    const { data } = await supabase.from('reviews').select('*').eq('learner_id', learner.id).order('created_at', { ascending: false })
+    setReviews(data || [])
+    setLoading(false)
+  }
+
+  async function approve(id) {
+    await supabase.from('reviews').update({ approved: true }).eq('id', id)
+    setReviews(r => r.map(x => x.id === id ? { ...x, approved: true } : x))
+    toast('Review approved — visible on portfolio ✓', 'success')
+  }
+
+  async function remove(id) {
+    await supabase.from('reviews').delete().eq('id', id)
+    setReviews(r => r.filter(x => x.id !== id))
+    toast('Review deleted', 'success')
+  }
+
+  const stars = n => '★'.repeat(n) + '☆'.repeat(5 - n)
+
+  if (loading) return <div style={{ padding: 32, textAlign: 'center' }}><Spinner color="#F4622A" /></div>
+
+  return (
+    <div style={card}>
+      <div style={chead}>
+        <div style={{ fontSize: 13, fontWeight: 600 }}>Customer reviews</div>
+        <span style={{ fontSize: 12, color: '#888' }}>{reviews.length} total · {reviews.filter(r => r.approved).length} approved</span>
+      </div>
+      {reviews.length === 0 ? (
+        <div style={{ padding: '48px 24px', textAlign: 'center', color: '#aaa' }}>
+          <div style={{ fontSize: 32, marginBottom: 12, opacity: .3 }}>★</div>
+          <div style={{ fontSize: 14 }}>No reviews yet — they appear when customers submit them on the portfolio</div>
+        </div>
+      ) : reviews.map(r => (
+        <div key={r.id} style={{ padding: '14px 18px', borderBottom: '1px solid #F5F3F0', display: 'flex', gap: 14, alignItems: 'flex-start' }}>
+          <div style={{ flex: 1 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
+              <span style={{ fontSize: 13, fontWeight: 600 }}>{r.reviewer}</span>
+              <span style={{ fontSize: 14, color: '#F4622A', letterSpacing: 1 }}>{stars(r.rating)}</span>
+              {r.approved
+                ? <span style={{ fontSize: 10, padding: '1px 8px', borderRadius: 99, background: '#E6F4EC', color: '#0D6B3A', fontWeight: 500 }}>✓ Live on portfolio</span>
+                : <span style={{ fontSize: 10, padding: '1px 8px', borderRadius: 99, background: '#FEF3E2', color: '#92400E', fontWeight: 500 }}>Pending approval</span>}
+            </div>
+            <div style={{ fontSize: 13, color: '#555', lineHeight: 1.65 }}>"{r.text}"</div>
+            <div style={{ fontSize: 11, color: '#bbb', marginTop: 6 }}>{new Date(r.created_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}</div>
+          </div>
+          <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+            {!r.approved && (
+              <button onClick={() => approve(r.id)} style={{ ...btn(), fontSize: 11, background: '#E6F4EC', borderColor: '#52B27A', color: '#0D6B3A' }}>Approve</button>
+            )}
+            <button onClick={() => remove(r.id)} style={{ ...btn(), fontSize: 11, color: '#991B1B', borderColor: '#FCA5A5' }}>Delete</button>
+          </div>
+        </div>
+      ))}
     </div>
   )
 }
