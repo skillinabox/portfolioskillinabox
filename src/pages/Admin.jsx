@@ -563,6 +563,7 @@ export default function Admin() {
                 <div style={{ padding:'0 18px 16px', fontSize:11, color:'#aaa' }}>
                   Learner sign-up link: <strong>{window.location.origin}/login</strong>
                 </div>
+                <CertificateManager learner={learner} toast={toast}/>
                 <PasswordManager learner={learner} toast={toast}/>
                 <DeleteLearner learner={learner} toast={toast} onDeleted={()=>{ setSelLid(null); loadLearners() }}/>
               </div>
@@ -1101,6 +1102,122 @@ function PoseSection({ garment, onUpdate, toast }) {
 }
 
 // ── Password Manager ──────────────────────────────────────────
+// ── Certificate Manager ───────────────────────────────────────
+function CertificateManager({ learner, toast }) {
+  const [certs,    setCerts]    = useState([])
+  const [loading,  setLoading]  = useState(true)
+  const [adding,   setAdding]   = useState(false)
+  const [form,     setForm]     = useState({ name:'', issuer:'Skillinabox', issued_on:'' })
+  const [uploading,setUploading]= useState(false)
+  const fileRef = useRef()
+
+  useEffect(() => { loadCerts() }, [learner.id])
+
+  async function loadCerts() {
+    setLoading(true)
+    const { data } = await supabase.from('certificates').select('*').eq('learner_id', learner.id).order('display_order')
+    setCerts(data || [])
+    setLoading(false)
+  }
+
+  async function handleAdd() {
+    if (!form.name) { toast('Enter a certificate name', 'error'); return }
+    const { data, error } = await supabase.from('certificates').insert({
+      learner_id: learner.id,
+      name: form.name,
+      issuer: form.issuer,
+      issued_on: form.issued_on,
+      display_order: certs.length,
+    }).select().single()
+    if (error) { toast(error.message, 'error'); return }
+    setCerts(c => [...c, data])
+    setForm({ name:'', issuer:'Skillinabox', issued_on:'' })
+    setAdding(false)
+    toast('Certificate added ✓', 'success')
+  }
+
+  async function handleUploadImage(certId, file) {
+    setUploading(true)
+    try {
+      const ext = file.name.split('.').pop()
+      const path = `${learner.id}/cert-${certId}.${ext}`
+      const { error } = await supabase.storage.from('garments').upload(path, file, { upsert: true })
+      if (error) throw error
+      const { data: { publicUrl } } = supabase.storage.from('garments').getPublicUrl(path)
+      await supabase.from('certificates').update({ image_url: publicUrl }).eq('id', certId)
+      setCerts(c => c.map(x => x.id === certId ? { ...x, image_url: publicUrl } : x))
+      toast('Certificate image uploaded ✓', 'success')
+    } catch(e) { toast(e.message, 'error') }
+    setUploading(false)
+  }
+
+  async function deleteCert(id) {
+    await supabase.from('certificates').delete().eq('id', id)
+    setCerts(c => c.filter(x => x.id !== id))
+    toast('Deleted', 'success')
+  }
+
+  const s = { display:'inline-flex', alignItems:'center', gap:5, padding:'6px 12px', fontSize:11, fontWeight:500, borderRadius:7, border:'1px solid', cursor:'pointer', fontFamily:'inherit' }
+
+  return (
+    <div style={{ margin:'0 18px 16px', padding:'14px 16px', background:'#F7F6F4', borderRadius:10 }}>
+      <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:12 }}>
+        <div style={{ fontSize:12, fontWeight:600, color:'#111' }}>Certificates & credentials</div>
+        <button onClick={()=>setAdding(a=>!a)} style={{ ...s, background:'#F4622A', borderColor:'#F4622A', color:'#fff' }}>
+          {adding ? '✕ Cancel' : '+ Add certificate'}
+        </button>
+      </div>
+
+      {/* Add form */}
+      {adding && (
+        <div style={{ background:'#fff', borderRadius:8, padding:12, marginBottom:12, display:'flex', flexDirection:'column', gap:8 }}>
+          {[['Certificate name *','name','e.g. Fashion Design Diploma'],['Issuing body','issuer','e.g. Skillinabox'],['Date issued','issued_on','e.g. March 2025']].map(([l,k,ph])=>(
+            <div key={k}>
+              <label style={{ fontSize:10, color:'#aaa', display:'block', marginBottom:3 }}>{l}</label>
+              <input value={form[k]} onChange={e=>setForm(p=>({...p,[k]:e.target.value}))} placeholder={ph}
+                style={{ width:'100%', fontSize:12, padding:'6px 10px', border:'1px solid #E2E0DC', borderRadius:6, outline:'none', fontFamily:'inherit' }}/>
+            </div>
+          ))}
+          <button onClick={handleAdd} style={{ ...s, background:'#F4622A', borderColor:'#F4622A', color:'#fff', justifyContent:'center', padding:'8px' }}>Add certificate</button>
+        </div>
+      )}
+
+      {/* Certificate list */}
+      {loading ? <div style={{ textAlign:'center', padding:16 }}><Spinner size={16} color="#F4622A"/></div>
+        : certs.length === 0 ? <div style={{ fontSize:12, color:'#bbb', fontStyle:'italic' }}>No certificates yet — click "Add certificate" to get started</div>
+        : (
+          <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
+            {certs.map(cert => {
+              const certFileRef = { current: null }
+              return (
+                <div key={cert.id} style={{ background:'#fff', borderRadius:8, padding:'10px 12px', display:'flex', gap:12, alignItems:'center' }}>
+                  {/* Certificate thumbnail */}
+                  <div onClick={()=>{
+                    const inp = document.createElement('input'); inp.type='file'; inp.accept='image/*';
+                    inp.onchange=e=>{ if(e.target.files[0]) handleUploadImage(cert.id, e.target.files[0]) }
+                    inp.click()
+                  }} style={{ width:48, height:48, borderRadius:6, border:'1px dashed #D0CCC8', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', overflow:'hidden', flexShrink:0, background:'#F7F6F4' }} title="Upload certificate image">
+                    {cert.image_url
+                      ? <img src={cert.image_url} alt="" style={{ width:'100%', height:'100%', objectFit:'cover' }}/>
+                      : <span style={{ fontSize:18, opacity:.4 }}>📜</span>}
+                  </div>
+                  {/* Details */}
+                  <div style={{ flex:1, minWidth:0 }}>
+                    <div style={{ fontSize:13, fontWeight:600, color:'#111', marginBottom:2 }}>{cert.name}</div>
+                    <div style={{ fontSize:11, color:'#888' }}>{cert.issuer}{cert.issued_on ? ` · ${cert.issued_on}` : ''}</div>
+                    {!cert.image_url && <div style={{ fontSize:10, color:'#bbb', marginTop:2 }}>Click the icon to upload the certificate image</div>}
+                  </div>
+                  <button onClick={()=>deleteCert(cert.id)} style={{ ...s, background:'transparent', borderColor:'#FCA5A5', color:'#991B1B', padding:'4px 8px' }}>✕</button>
+                </div>
+              )
+            })}
+          </div>
+        )}
+      {uploading && <div style={{ fontSize:11, color:'#F4622A', marginTop:8, display:'flex', alignItems:'center', gap:5 }}><Spinner size={11} color="#F4622A"/> Uploading image…</div>}
+    </div>
+  )
+}
+
 function PasswordManager({ learner, toast }) {
   const [tempPass,   setTempPass]   = useState(null)
   const [sending,    setSending]    = useState(false)
