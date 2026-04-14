@@ -130,15 +130,15 @@ export default function Portfolio() {
         @import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:wght@300;400;500;600&display=swap');
         *{box-sizing:border-box;margin:0;padding:0} html{scroll-behavior:smooth} body{background:#F7F6F4}
         .nl{padding:6px 0;font-size:13px;color:#777;cursor:pointer;border:none;border-bottom:2px solid transparent;background:none;font-family:inherit;transition:all .2s;text-transform:capitalize}
-        .nl:hover,.nl.on{color:#fff;border-bottom-color:${G}}
+        .nl:hover,.nl.on{color:#fff;border-bottom-color:#F4622A}
         .gc{background:#fff;border-radius:16px;overflow:hidden;border:1px solid #E8E6E2;transition:transform .25s,box-shadow .25s;cursor:pointer;position:relative}
         .gc:hover{transform:translateY(-6px);box-shadow:0 16px 48px rgba(0,0,0,.12)}
         .gc:hover .go{opacity:1;transform:translateY(0)}
-        .go{position:absolute;bottom:16px;left:16px;right:16px;background:${G};color:#fff;padding:10px;border-radius:8px;font-size:13px;font-weight:600;text-align:center;opacity:0;transform:translateY(8px);transition:all .25s}
+        .go{position:absolute;bottom:16px;left:16px;right:16px;background:#F4622A;color:#fff;padding:10px;border-radius:8px;font-size:13px;font-weight:600;text-align:center;opacity:0;transform:translateY(8px);transition:all .25s}
         .ec{background:#fff;border:1px solid #E8E6E2;border-radius:14px;padding:28px 24px;transition:all .25s}
-        .ec:hover{border-color:${G};transform:translateY(-2px)}
+        .ec:hover{border-color:#F4622A;transform:translateY(-2px)}
         .inf{width:100%;padding:11px 14px;font-size:14px;border:1px solid #E2E0DC;border-radius:10px;outline:none;transition:border-color .15s;font-family:inherit}
-        .inf:focus{border-color:${G}}
+        .inf:focus{border-color:#F4622A}
         @keyframes fadeUp{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
         .fu{animation:fadeUp .6s ease both}
       `}</style>
