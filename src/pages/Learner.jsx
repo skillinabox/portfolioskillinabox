@@ -34,7 +34,7 @@ export default function Learner() {
   const [editForm,     setEditForm]     = useState({})
   const [activeSub,    setActiveSub]    = useState(null)
   const [usage,        setUsage]        = useState({ garments_used:0, poses_used:0 })
-
+  const [showUpgrade,  setShowUpgrade]  = useState(false)
   const [showUpgrade,  setShowUpgrade]  = useState(null) // { feature, used, limit }
 
   const fileRef  = useRef()
@@ -360,6 +360,13 @@ export default function Learner() {
                       <div style={{ display:'flex', gap:8, alignItems:'center' }}>
                         <StatusBadge status={garment.status}/>
                         <button style={btn()} onClick={()=>{ setEditingGid(garment.id); setEditForm({}) }}>Edit details</button>
+                        <button onClick={async()=>{
+                          if(!confirm(`Delete "${garment.name}"? This cannot be undone.`)) return
+                          await supabase.from('garments').delete().eq('id',garment.id)
+                          setGarments(gs=>gs.filter(g=>g.id!==garment.id))
+                          setSelGid(null)
+                          toast('Garment deleted','success')
+                        }} style={{ ...btn(), fontSize:11, color:'#991B1B', borderColor:'#FCA5A5' }}>Delete</button>
                       </div>
                     </div>
 
