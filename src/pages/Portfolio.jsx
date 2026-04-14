@@ -14,6 +14,7 @@ export default function Portfolio() {
   const [garments,   setGarments]   = useState([])
   const [colls,      setColls]      = useState([])
   const [reviews,    setReviews]    = useState([])
+  const [certs,      setCerts]      = useState([])
   const [loading,    setLoading]    = useState(true)
   const [enquiry,    setEnquiry]    = useState(null) // garment or 'general'
   const [step,       setStep]       = useState(1)    // 1=form, 2=measurements, 3=done
@@ -35,12 +36,13 @@ export default function Portfolio() {
         l = data
       }
       if (!l) { setLoading(false); return }
-      const [{ data:g }, { data:c }, { data:r }] = await Promise.all([
+      const [{ data:g }, { data:c }, { data:r }, { data:cr }] = await Promise.all([
         supabase.from('garments').select('*').eq('learner_id',l.id).eq('status','published').order('created_at'),
         supabase.from('collections').select('*').eq('learner_id',l.id).order('display_order'),
         supabase.from('reviews').select('*').eq('learner_id',l.id).eq('approved',true).order('created_at',{ascending:false}),
+        supabase.from('certificates').select('*').eq('learner_id',l.id).order('display_order'),
       ])
-      setLearner(l); setGarments(g||[]); setColls(c||[]); setReviews(r||[]); setLoading(false)
+      setLearner(l); setGarments(g||[]); setColls(c||[]); setReviews(r||[]); setCerts(cr||[]); setLoading(false)
     }
     load()
   }, [slug])
@@ -386,6 +388,42 @@ export default function Portfolio() {
           </div>
         </div>
       </section>
+
+      {/* CERTIFICATES */}
+      {certs.length > 0 && (
+        <section style={{ padding:'72px 24px', background:'#F7F6F4' }}>
+          <div style={{ maxWidth:1100, margin:'0 auto' }}>
+            <div style={{ textAlign:'center', marginBottom:48 }}>
+              <div style={{ fontSize:11, fontWeight:600, color:G, letterSpacing:'.12em', textTransform:'uppercase', marginBottom:12 }}>Qualifications</div>
+              <h2 style={{ fontFamily:"'DM Serif Display',serif", fontSize:40, color:'#111' }}>Certificates & credentials</h2>
+            </div>
+            <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(260px,1fr))', gap:20 }}>
+              {certs.map((cert, i) => (
+                <div key={cert.id} onClick={()=>cert.image_url&&setLightbox({ images:[cert.image_url], index:0 })}
+                  style={{ background:'#fff', borderRadius:14, overflow:'hidden', border:'1px solid #E8E6E2', cursor:cert.image_url?'pointer':'default', transition:'transform .2s, box-shadow .2s' }}
+                  onMouseOver={e=>{ if(cert.image_url){ e.currentTarget.style.transform='translateY(-4px)'; e.currentTarget.style.boxShadow='0 12px 32px rgba(0,0,0,.1)' }}}
+                  onMouseOut={e=>{ e.currentTarget.style.transform=''; e.currentTarget.style.boxShadow='' }}>
+                  {cert.image_url ? (
+                    <div style={{ position:'relative', paddingBottom:'70%', background:'#F0EDEA', overflow:'hidden' }}>
+                      <img src={cert.image_url} alt={cert.name} style={{ position:'absolute', inset:0, width:'100%', height:'100%', objectFit:'cover' }}/>
+                      <div style={{ position:'absolute', top:10, right:10, background:'rgba(0,0,0,.5)', color:'#fff', fontSize:10, padding:'3px 8px', borderRadius:99 }}>View ↗</div>
+                    </div>
+                  ) : (
+                    <div style={{ paddingBottom:'70%', position:'relative', background:`linear-gradient(135deg,#FEF0EA,#F7F6F4)` }}>
+                      <div style={{ position:'absolute', inset:0, display:'flex', alignItems:'center', justifyContent:'center', fontSize:48, opacity:.25 }}>📜</div>
+                    </div>
+                  )}
+                  <div style={{ padding:'16px 18px' }}>
+                    <div style={{ fontSize:14, fontWeight:600, color:'#111', marginBottom:4 }}>{cert.name}</div>
+                    <div style={{ fontSize:12, color:'#888' }}>{cert.issuer}</div>
+                    {cert.issued_on && <div style={{ fontSize:11, color:'#bbb', marginTop:4 }}>{cert.issued_on}</div>}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+      )}
 
       {/* REVIEWS */}
       <section id="reviews" style={{ padding:'96px 24px', background:'#0A0A0A' }}>
