@@ -293,9 +293,6 @@ export default function Portfolio() {
               </div>
             </div>
           ))}
-              </div>
-            </div>
-          ))}
           {garments.length===0&&<div style={{ textAlign:'center', padding:'80px 24px', color:'#aaa' }}><div style={{ fontSize:40, marginBottom:12, opacity:.3 }}>✦</div><div style={{ fontSize:16 }}>Collection coming soon</div></div>}
         </div>
       </section>
