@@ -3,23 +3,20 @@ import { createContext, useContext, useState, useCallback } from 'react'
 // ── SIB Logo ──────────────────────────────────────────────────
 export function SIBLogo({ dark = true }) {
   const textColor = dark ? '#fff' : '#111'
-  const tagColor  = dark ? '#666' : '#999'
+  const tagColor  = dark ? '#555' : '#aaa'
   return (
-    <div style={{ display:'flex', alignItems:'center', gap:10 }}>
-      <div style={{ display:'flex', flexDirection:'column', gap:3 }}>
-        <div style={{ display:'flex', gap:3, alignItems:'center' }}>
-          <div style={{ width:14, height:3, borderRadius:2, background:'#00B4D8' }} />
-          <div style={{ width:22, height:3, borderRadius:2, background:'#00B4D8' }} />
+    <div style={{ display:'flex', alignItems:'center', gap:8, userSelect:'none' }}>
+      <div style={{ display:'flex', flexDirection:'column', gap:3, flexShrink:0 }}>
+        <div style={{ width:20, height:3, borderRadius:2, background:'#00B4D8' }}/>
+        <div style={{ display:'flex', gap:2, alignItems:'center' }}>
+          <div style={{ width:6,  height:3, borderRadius:2, background:'#F4A61A' }}/>
+          <div style={{ width:14, height:3, borderRadius:2, background: dark?'#555':'#ccc' }}/>
         </div>
-        <div style={{ display:'flex', gap:3, alignItems:'center' }}>
-          <div style={{ width:5,  height:3, borderRadius:2, background:'#F4A61A' }} />
-          <div style={{ width:18, height:3, borderRadius:2, background:'#AAAAAA' }} />
-        </div>
-        <div style={{ width:22, height:3, borderRadius:2, background:'#F4622A' }} />
+        <div style={{ width:20, height:3, borderRadius:2, background:'#F4622A' }}/>
       </div>
       <div>
-        <div style={{ fontFamily:"'DM Serif Display', serif", fontSize:15, color:textColor, lineHeight:1 }}>Skillinabox</div>
-        <div style={{ fontSize:10, color:tagColor, letterSpacing:'.04em', marginTop:2 }}>PORTFOLIO PLATFORM</div>
+        <div style={{ fontFamily:"'DM Serif Display',Georgia,serif", fontSize:15, color:textColor, lineHeight:1, fontWeight:400, letterSpacing:'.01em' }}>Skillinabox</div>
+        <div style={{ fontSize:8, color:tagColor, letterSpacing:'.08em', marginTop:3, textTransform:'uppercase', fontWeight:500 }}>Portfolio Platform</div>
       </div>
     </div>
   )
@@ -40,6 +37,7 @@ export function StatusBadge({ status }) {
     tagged:       ['Tagged',      'b-green'],
     tagging:      ['LIA tagging…', 'b-purple'],
     uploading:    ['Uploading…',  'b-gray'],
+    uploaded:     ['🔒 LIA locked', 'b-amber'],
     ready:        ['Poses ready', 'b-amber'],
     order:        ['Order',       'b-orange'],
     enquiry:      ['Enquiry',     'b-green'],
