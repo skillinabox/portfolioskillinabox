@@ -1351,22 +1351,22 @@ function DeleteLearner({ learner, toast, onDeleted }) {
 
   if (!confirm) return (
     <div style={{ margin:'0 18px 18px', borderTop:'1px solid #FEE2E2', paddingTop:14 }}>
+      <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'12px 18px', background:'#F0EFFE', borderRadius:8, marginBottom:12 }}>
+        <div>
+          <div style={{ fontSize:12, fontWeight:600, color:'#5B21B6' }}>🎭 Demo mode {learner.is_demo ? 'ON' : 'OFF'}</div>
+          <div style={{ fontSize:11, color:'#7C3AED', marginTop:2 }}>When ON — AI tagging and poses use sample data instantly, no API costs</div>
+        </div>
+        <button onClick={async()=>{
+          const val = !learner.is_demo
+          await supabase.from('learners').update({ is_demo: val }).eq('id', learner.id)
+          updateLearner({ is_demo: val })
+          toast(val ? '🎭 Demo mode ON — no API costs' : 'Demo mode OFF — live API enabled', 'success')
+        }} style={{ padding:'7px 16px', fontSize:12, fontWeight:600, borderRadius:8, border:'none', background: learner.is_demo ? '#5B21B6' : '#E9D5FF', color: learner.is_demo ? '#fff' : '#5B21B6', cursor:'pointer', fontFamily:'inherit', flexShrink:0 }}>
+          {learner.is_demo ? 'Turn OFF' : 'Turn ON'}
+        </button>
+      </div>
       <button onClick={()=>setConfirm(true)}
         style={{ ...s, background:'transparent', borderColor:'#FCA5A5', color:'#991B1B', fontSize:12 }}>
-        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'12px 18px', background:'#F0EFFE', borderRadius:8, margin:'0 18px 12px' }}>
-          <div>
-            <div style={{ fontSize:12, fontWeight:600, color:'#5B21B6' }}>🎭 Demo mode {learner.is_demo ? 'ON' : 'OFF'}</div>
-            <div style={{ fontSize:11, color:'#7C3AED', marginTop:2 }}>When ON — AI tagging and poses use sample data instantly, no API costs</div>
-          </div>
-          <button onClick={async()=>{
-            const val = !learner.is_demo
-            await supabase.from('learners').update({ is_demo: val }).eq('id', learner.id)
-            updateLearner({ is_demo: val })
-            toast(val ? '🎭 Demo mode ON — no API costs' : 'Demo mode OFF — live API enabled', 'success')
-          }} style={{ padding:'7px 16px', fontSize:12, fontWeight:600, borderRadius:8, border:'none', background: learner.is_demo ? '#5B21B6' : '#E9D5FF', color: learner.is_demo ? '#fff' : '#5B21B6', cursor:'pointer', fontFamily:'inherit', flexShrink:0 }}>
-            {learner.is_demo ? 'Turn OFF' : 'Turn ON'}
-          </button>
-        </div>
         ✕ Delete learner & all data
       </button>
     </div>
