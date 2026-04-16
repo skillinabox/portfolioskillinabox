@@ -1,5 +1,16 @@
 // api/submit-poses.js
-// Submits pose generation to Fashn.ai, returns prediction IDs immediately.
+
+// Demo pose images — free Unsplash fashion photos, rotating set
+const DEMO_POSES = [
+  'https://images.unsplash.com/photo-1583391733956-6c78276477e2?w=600&q=80', // front
+  'https://images.unsplash.com/photo-1594938298603-c8148c4b4d05?w=600&q=80', // back
+  'https://images.unsplash.com/photo-1595777457583-95e059d581b8?w=600&q=80', // left
+  'https://images.unsplash.com/photo-1567401893414-76b7b1e5a7a5?w=600&q=80', // right
+  'https://images.unsplash.com/photo-1552374196-1ab2a1c593e8?w=600&q=80', // walking
+  'https://images.unsplash.com/photo-1509631179647-0177331693ae?w=600&q=80', // sitting
+  'https://images.unsplash.com/photo-1515886657613-9f3515b0c78f?w=600&q=80', // closeup
+  'https://images.unsplash.com/photo-1581044777550-4cfa60707c03?w=600&q=80', // outdoor
+]
 
 const POSES = {
   female: {
@@ -31,14 +42,27 @@ export default async function handler(req, res) {
   if (req.method === 'OPTIONS') return res.status(200).end()
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
 
+  const { garment_image_url, gender = 'female', pose_keys, demo_mode } = req.body
+  if (!garment_image_url) return res.status(400).json({ error: 'Missing garment_image_url' })
+
+  const keys = pose_keys?.length ? pose_keys : ['front', 'back', 'walking', 'sitting']
+
+  // ── Demo mode — return pre-loaded images instantly, no API call ──
+  if (demo_mode) {
+    const allKeys = ['front','back','left','right','walking','sitting','closeup','outdoor']
+    const poses = {}
+    keys.forEach((k, i) => {
+      const idx = allKeys.indexOf(k)
+      poses[k] = DEMO_POSES[idx !== -1 ? idx : i % DEMO_POSES.length]
+    })
+    return res.status(200).json({ poses_direct: poses }) // direct URLs, no polling needed
+  }
+
+  // ── Real API call ─────────────────────────────────────────
   const apiKey = process.env.FASHN_API_KEY
   if (!apiKey) return res.status(500).json({ error: 'FASHN_API_KEY not configured' })
 
-  const { garment_image_url, gender = 'female', pose_keys } = req.body
-  if (!garment_image_url) return res.status(400).json({ error: 'Missing garment_image_url' })
-
   const prompts = POSES[gender] || POSES.female
-  const keys = pose_keys?.length ? pose_keys : ['front', 'back', 'walking', 'sitting']
   const predictionIds = {}
 
   for (const key of keys) {

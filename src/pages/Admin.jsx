@@ -110,7 +110,7 @@ export default function Admin() {
       mutG(gs => gs.map(x => x.id === g.id ? { ...x, image_url: imageUrl, status: 'tagging' } : x))
       await supabase.from('garments').update({ image_url: imageUrl, status: 'tagging' }).eq('id', g.id)
       const base64 = await fileToBase64(file)
-      const tags = await tagGarment(base64, file.type)
+      const tags = await tagGarment(base64, file.type, learner?.is_demo || false)
       const updates = { ...tags, name: tags.name || file.name.replace(/\.[^.]+$/, ''), status: 'tagged', ai_tagged: true }
       await supabase.from('garments').update(updates).eq('id', g.id)
       mutG(gs => gs.map(x => x.id === g.id ? { ...x, ...updates } : x))
@@ -135,7 +135,7 @@ export default function Admin() {
     if (!garment) return
     setGenningDesc(true)
     try {
-      const desc = await generateGarmentDesc(garment.name, garment.category, garment.fabric, garment.features)
+      const desc = await generateGarmentDesc(garment.name, garment.category, garment.fabric, garment.features, learner?.is_demo || false)
       await updateGarment('description', desc)
       toast('Description generated ✓', 'success')
     } catch { toast('Failed', 'error') }
@@ -145,7 +145,7 @@ export default function Admin() {
   async function handleGenColDesc(col) {
     const gNames = garments.filter(g => g.collection_id === col.id).map(g => g.name)
     try {
-      const desc = await generateCollectionDesc(col.name, gNames)
+      const desc = await generateCollectionDesc(col.name, gNames, learner?.is_demo || false)
       await updateCollection(col.id, { description: desc })
       toast('Description generated ✓', 'success')
     } catch { toast('Failed', 'error') }
@@ -160,7 +160,7 @@ export default function Admin() {
     mutC(cs => [...cs, data])
     setShowAddCol(false)
     toast('Collection created!', 'success')
-    const desc = await generateCollectionDesc(form.name, []).catch(() => '')
+    const desc = await generateCollectionDesc(form.name, [], learner?.is_demo || false).catch(() => '')
     if (desc) { await updateCollection(data.id, { description: desc }) }
   }
 
@@ -308,6 +308,15 @@ export default function Admin() {
 
             {/* ── GARMENTS TAB ── */}
             {tab==='garments' && <>
+              {learner?.is_demo && (
+                <div style={{ margin:'0 0 12px', padding:'10px 14px', background:'#F0EFFE', borderRadius:8, border:'1px solid #DDD6FE', display:'flex', alignItems:'center', gap:8 }}>
+                  <span style={{ fontSize:16 }}>🎭</span>
+                  <div>
+                    <span style={{ fontSize:12, fontWeight:600, color:'#5B21B6' }}>Demo mode active</span>
+                    <span style={{ fontSize:12, color:'#7C3AED', marginLeft:8 }}>AI tagging and poses use sample data — no API credits used</span>
+                  </div>
+                </div>
+              )}
               <div style={card}>
                 <div style={chead}>
                   <div>
@@ -408,7 +417,7 @@ export default function Admin() {
                   </div>
 
                   {/* ── POSE GENERATION ── */}
-                  <PoseSection garment={garment} onUpdate={updateGarment} toast={toast}/>
+                  <PoseSection garment={garment} onUpdate={updateGarment} toast={toast} demoMode={learner?.is_demo||false}/>
                 </div>
               )}
             </>}
@@ -529,7 +538,7 @@ export default function Admin() {
                       <button onClick={async()=>{
                         const name = learner.name, brand = learner.brand, speciality = learner.speciality
                         const res = await fetch('/api/tag-garment', { method:'POST', headers:{'Content-Type':'application/json'},
-                          body: JSON.stringify({ gen_bio: true, name, brand, speciality, skills: learner.skills, expertise: learner.expertise }) })
+                          body: JSON.stringify({ gen_bio: true, name, brand, speciality, skills: learner.skills, expertise: learner.expertise, demo_mode: learner.is_demo }) })
                         const d = await res.json()
                         if(d.description) updateLearner({ bio: d.description })
                         toast('Bio written ✓','success')
@@ -548,7 +557,7 @@ export default function Admin() {
                       <label style={{ fontSize:11, color:'#aaa' }}>Expertise (with descriptions)</label>
                       <button onClick={async()=>{
                         const res = await fetch('/api/tag-garment', { method:'POST', headers:{'Content-Type':'application/json'},
-                          body: JSON.stringify({ gen_expertise: true, expertise: learner.expertise, speciality: learner.speciality }) })
+                          body: JSON.stringify({ gen_expertise: true, expertise: learner.expertise, speciality: learner.speciality, demo_mode: learner.is_demo }) })
                         const d = await res.json()
                         if(d.description) updateLearner({ expertise: d.description })
                         toast('Expertise expanded ✓','success')
@@ -853,7 +862,7 @@ const POSE_LABELS = [
   { key:'outdoor', label:'Outdoor',   icon:'🌿' },
 ]
 
-function PoseSection({ garment, onUpdate, toast }) {
+function PoseSection({ garment, onUpdate, toast, demoMode = false }) {
   const [submitting,   setSubmitting]  = useState(false)
   const [selPoses,     setSelPoses]    = useState(['front','back','walking','sitting'])
   const [poseTab,      setPoseTab]     = useState('generate')
@@ -929,14 +938,22 @@ function PoseSection({ garment, onUpdate, toast }) {
     try {
       const res = await fetch('/api/submit-poses', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ garment_image_url: garment.image_url, gender: garment.gender||'female', pose_keys: keys }),
+        body: JSON.stringify({ garment_image_url: garment.image_url, gender: garment.gender||'female', pose_keys: keys, demo_mode: demoMode }),
       })
       const data = await res.json()
       if (data.error) throw new Error(data.error)
-      await onUpdate('pending_poses', { ...pendingPoses, ...data.prediction_ids })
-      pollCount.current = 0
-      startPolling()
-      toast(`Submitted ${keys.length} pose${keys.length!==1?'s':''} — safe to switch screens ✓`, 'default')
+      // Demo mode returns poses directly — no polling needed
+      if (data.poses_direct) {
+        await onUpdate('poses', { ...(garment.poses||{}), ...data.poses_direct })
+        await onUpdate('pending_poses', {})
+        toast(`${keys.length} demo pose${keys.length!==1?'s':''} ready ✓`, 'success')
+      } else {
+        const newPending = { ...pendingPoses, ...data.prediction_ids }
+        await onUpdate('pending_poses', newPending)
+        pollCount.current = 0
+        startPolling()
+        toast(`Generating ${keys.length} pose${keys.length!==1?'s':''} — safe to switch screens ✓`, 'default')
+      }
     } catch(err) { toast(err.message||'Failed', 'error') }
     setSubmitting(false)
   }
@@ -1336,6 +1353,20 @@ function DeleteLearner({ learner, toast, onDeleted }) {
     <div style={{ margin:'0 18px 18px', borderTop:'1px solid #FEE2E2', paddingTop:14 }}>
       <button onClick={()=>setConfirm(true)}
         style={{ ...s, background:'transparent', borderColor:'#FCA5A5', color:'#991B1B', fontSize:12 }}>
+        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'12px 18px', background:'#F0EFFE', borderRadius:8, margin:'0 18px 12px' }}>
+          <div>
+            <div style={{ fontSize:12, fontWeight:600, color:'#5B21B6' }}>🎭 Demo mode {learner.is_demo ? 'ON' : 'OFF'}</div>
+            <div style={{ fontSize:11, color:'#7C3AED', marginTop:2 }}>When ON — AI tagging and poses use sample data instantly, no API costs</div>
+          </div>
+          <button onClick={async()=>{
+            const val = !learner.is_demo
+            await supabase.from('learners').update({ is_demo: val }).eq('id', learner.id)
+            updateLearner({ is_demo: val })
+            toast(val ? '🎭 Demo mode ON — no API costs' : 'Demo mode OFF — live API enabled', 'success')
+          }} style={{ padding:'7px 16px', fontSize:12, fontWeight:600, borderRadius:8, border:'none', background: learner.is_demo ? '#5B21B6' : '#E9D5FF', color: learner.is_demo ? '#fff' : '#5B21B6', cursor:'pointer', fontFamily:'inherit', flexShrink:0 }}>
+            {learner.is_demo ? 'Turn OFF' : 'Turn ON'}
+          </button>
+        </div>
         ✕ Delete learner & all data
       </button>
     </div>

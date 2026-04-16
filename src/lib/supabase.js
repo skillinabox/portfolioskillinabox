@@ -5,28 +5,28 @@ export const supabase = createClient(
   import.meta.env.VITE_SUPABASE_ANON_KEY
 )
 
-export async function tagGarment(base64, mimeType) {
+export async function tagGarment(base64, mimeType, demoMode = false) {
   const res = await fetch('/api/tag-garment', {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ image_base64: base64, mime_type: mimeType }),
+    body: JSON.stringify({ image_base64: base64, mime_type: mimeType, demo_mode: demoMode }),
   })
   if (!res.ok) throw new Error('Tagging failed')
   return res.json()
 }
 
-export async function generateCollectionDesc(name, garmentNames = []) {
+export async function generateCollectionDesc(name, garmentNames = [], demoMode = false) {
   const res = await fetch('/api/tag-garment', {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ gen_collection_desc: true, collection_name: name, garment_names: garmentNames }),
+    body: JSON.stringify({ gen_collection_desc: true, collection_name: name, garment_names: garmentNames, demo_mode: demoMode }),
   })
   if (!res.ok) throw new Error('Failed')
   return (await res.json()).description || ''
 }
 
-export async function generateGarmentDesc(name, category, fabric, features) {
+export async function generateGarmentDesc(name, category, fabric, features, demoMode = false) {
   const res = await fetch('/api/tag-garment', {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ gen_garment_desc: true, garment_name: name, category, fabric, features }),
+    body: JSON.stringify({ gen_garment_desc: true, garment_name: name, category, fabric, features, demo_mode: demoMode }),
   })
   if (!res.ok) throw new Error('Failed')
   return (await res.json()).description || ''

@@ -10,6 +10,27 @@ export default async function handler(req, res) {
 
   const body = req.body
 
+  // ── Demo mode — no API calls, instant responses ───────────
+  if (body.demo_mode) {
+    if (body.gen_collection_desc) return res.status(200).json({ description: 'A stunning curated collection featuring handcrafted Indian fashion with intricate embroidery and premium fabrics, designed for the modern woman who celebrates tradition with elegance.' })
+    if (body.gen_garment_desc) return res.status(200).json({ description: `This exquisite ${body.garment_name||'garment'} is crafted with meticulous attention to detail, featuring premium ${body.fabric||'fabric'} with hand-embellished accents. A perfect blend of traditional artistry and contemporary silhouettes.` })
+    if (body.gen_bio) return res.status(200).json({ description: `A passionate fashion designer and proud graduate of the Skillinabox Fashion Design Programme, she brings a unique vision to every creation. With expertise in traditional Indian textiles and modern silhouettes, her work celebrates the richness of Indian craftsmanship. Each piece tells a story of heritage, skill, and contemporary elegance.` })
+    if (body.gen_expertise) return res.status(200).json({ description: (body.expertise||'Bridal Wear, Embroidery').split(',').map(e => `${e.trim()} — specialising in premium handcrafted designs with traditional Indian motifs and contemporary styling`).join('\n') })
+    // Demo garment tagging — returns instantly
+    return res.status(200).json({
+      name: ['Zardozi Lehenga Set', 'Bridal Anarkali', 'Designer Saree', 'Embroidered Kurta', 'Silk Dupatta Set', 'Festive Lehenga'][Math.floor(Math.random()*6)],
+      category: ['Lehenga', 'Anarkali', 'Saree', 'Kurta', 'Co-ord Set'][Math.floor(Math.random()*5)],
+      fabric: ['Velvet', 'Silk', 'Georgette', 'Net', 'Chiffon'][Math.floor(Math.random()*5)],
+      colour: ['Deep Red', 'Royal Blue', 'Emerald Green', 'Ivory', 'Blush Pink'][Math.floor(Math.random()*5)],
+      features: 'Hand embroidered with zardozi work, intricate mirror detailing, premium quality fabric with rich texture',
+      occasion: 'Wedding, Festive celebrations, Reception',
+      sizes: 'S, M, L, XL',
+      availability: 'Made to order',
+      gender: 'female',
+      description: 'A magnificent ensemble crafted with exquisite hand embroidery and premium fabric. This piece showcases traditional Indian craftsmanship with a contemporary silhouette, perfect for grand celebrations.',
+    })
+  }
+
   async function callClaude(messages, maxTokens = 400) {
     const r = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
