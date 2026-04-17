@@ -196,7 +196,7 @@ export default function Admin() {
   const filtered = learners
     .filter(l => {
       const q = search.toLowerCase()
-      const matchSearch = !q || l.name.toLowerCase().includes(q) || (l.brand||'').toLowerCase().includes(q) || (l.location||'').toLowerCase().includes(q)
+      const matchSearch = !q || l.name.toLowerCase().includes(q) || (l.brand||'').toLowerCase().includes(q) || (l.location||'').toLowerCase().includes(q) || (l.email||'').toLowerCase().includes(q) || (l.phone||'').includes(q)
       const matchStatus = filterStatus === 'all' ? true
         : filterStatus === 'demo' ? l.is_demo
         : l.status === filterStatus
@@ -243,7 +243,7 @@ export default function Admin() {
       <aside style={{ background:'#131313', borderRight:'1px solid #1E1E1E', overflowY:'auto', display:'flex', flexDirection:'column' }}>
         <div style={{ padding:'10px 12px 8px', borderBottom:'1px solid #1E1E1E' }}>
           <div style={{ display:'flex', gap:8, marginBottom:8 }}>
-            <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search name, brand, city…"
+            <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Name, brand, city, email, phone…"
               style={{ flex:1, fontSize:12, padding:'7px 10px', border:'1px solid #2A2A2A', borderRadius:8, background:'#1A1A1A', color:'#fff', outline:'none', fontFamily:'inherit' }}/>
             <button style={{ ...btn('primary'), padding:'7px 12px', fontSize:12, flexShrink:0 }} onClick={()=>setShowAdd(true)}>+ Add</button>
           </div>
