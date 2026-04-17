@@ -1356,9 +1356,9 @@ function DeleteLearner({ learner, toast, onDeleted }) {
           <div style={{ fontSize:12, fontWeight:600, color:'#5B21B6' }}>🎭 Demo mode {learner.is_demo ? 'ON' : 'OFF'}</div>
           <div style={{ fontSize:11, color:'#7C3AED', marginTop:2 }}>When ON — AI tagging and poses use sample data instantly, no API costs</div>
         </div>
-        <button onClick={async()=>{
+        <button onClick={async(e)=>{
+          e.stopPropagation()
           const val = !learner.is_demo
-          await supabase.from('learners').update({ is_demo: val }).eq('id', learner.id)
           updateLearner({ is_demo: val })
           toast(val ? '🎭 Demo mode ON — no API costs' : 'Demo mode OFF — live API enabled', 'success')
         }} style={{ padding:'7px 16px', fontSize:12, fontWeight:600, borderRadius:8, border:'none', background: learner.is_demo ? '#5B21B6' : '#E9D5FF', color: learner.is_demo ? '#fff' : '#5B21B6', cursor:'pointer', fontFamily:'inherit', flexShrink:0 }}>
