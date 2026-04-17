@@ -30,6 +30,8 @@ export default function Admin() {
   const [loadingL,     setLoadingL]     = useState(true)
   const [loadingG,     setLoadingG]     = useState(false)
   const [search,       setSearch]       = useState('')
+  const [filterStatus, setFilterStatus] = useState('all') // all | published | in-progress | new | demo
+  const [sortBy,       setSortBy]       = useState('name') // name | recent | status
   const [tab,          setTab]          = useState(() => localStorage.getItem('snb_tab') || 'garments')
   const [publishing,   setPublishing]   = useState(false)
   const [showAdd,      setShowAdd]      = useState(false)
@@ -190,8 +192,22 @@ export default function Admin() {
 
   const counts = { published: 0, 'in-progress': 0, new: 0 }
   learners.forEach(l => { if (counts[l.status] !== undefined) counts[l.status]++ })
-  const filtered = learners.filter(l =>
-    l.name.toLowerCase().includes(search.toLowerCase()) || (l.brand||'').toLowerCase().includes(search.toLowerCase()))
+
+  const filtered = learners
+    .filter(l => {
+      const q = search.toLowerCase()
+      const matchSearch = !q || l.name.toLowerCase().includes(q) || (l.brand||'').toLowerCase().includes(q) || (l.location||'').toLowerCase().includes(q)
+      const matchStatus = filterStatus === 'all' ? true
+        : filterStatus === 'demo' ? l.is_demo
+        : l.status === filterStatus
+      return matchSearch && matchStatus
+    })
+    .sort((a, b) => {
+      if (sortBy === 'name')   return a.name.localeCompare(b.name)
+      if (sortBy === 'recent') return new Date(b.created_at||0) - new Date(a.created_at||0)
+      if (sortBy === 'status') return a.status.localeCompare(b.status)
+      return 0
+    })
 
   const garmentsByCol = collections.reduce((acc, c) => {
     acc[c.id] = garments.filter(g => g.collection_id === c.id)
@@ -226,31 +242,60 @@ export default function Admin() {
       {/* Sidebar */}
       <aside style={{ background:'#131313', borderRight:'1px solid #1E1E1E', overflowY:'auto', display:'flex', flexDirection:'column' }}>
         <div style={{ padding:'10px 12px 8px', borderBottom:'1px solid #1E1E1E' }}>
-          <div style={{ display:'flex', gap:8, marginBottom:6 }}>
-            <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search learners…"
-              style={{ flex:1, fontSize:13, padding:'7px 10px', border:'1px solid #2A2A2A', borderRadius:8, background:'#1A1A1A', color:'#fff', outline:'none', fontFamily:'inherit' }}/>
-            <button style={{ ...btn('primary'), padding:'7px 12px' }} onClick={()=>setShowAdd(true)}>+ Add</button>
+          <div style={{ display:'flex', gap:8, marginBottom:8 }}>
+            <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search name, brand, city…"
+              style={{ flex:1, fontSize:12, padding:'7px 10px', border:'1px solid #2A2A2A', borderRadius:8, background:'#1A1A1A', color:'#fff', outline:'none', fontFamily:'inherit' }}/>
+            <button style={{ ...btn('primary'), padding:'7px 12px', fontSize:12, flexShrink:0 }} onClick={()=>setShowAdd(true)}>+ Add</button>
           </div>
-          <div style={{ fontSize:11, color:'#444' }}>{filtered.length} learner{filtered.length!==1?'s':''}</div>
+          <div style={{ display:'flex', gap:4, flexWrap:'wrap', marginBottom:6 }}>
+            {[['all','All',learners.length],['published','Live',counts.published],['in-progress','Active',counts['in-progress']],['new','New',counts.new],['demo','Demo',learners.filter(l=>l.is_demo).length]].map(([val,label,count])=>(
+              <button key={val} onClick={()=>setFilterStatus(val)}
+                style={{ fontSize:10, padding:'3px 8px', borderRadius:99, border:'none', cursor:'pointer', fontFamily:'inherit', fontWeight:filterStatus===val?600:400,
+                  background: filterStatus===val ? '#F4622A' : '#2A2A2A',
+                  color: filterStatus===val ? '#fff' : '#666' }}>
+                {label} <span style={{ opacity:.7 }}>{count}</span>
+              </button>
+            ))}
+          </div>
+          <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+            <div style={{ fontSize:11, color:'#444' }}>{filtered.length} learner{filtered.length!==1?'s':''}</div>
+            <select value={sortBy} onChange={e=>setSortBy(e.target.value)}
+              style={{ fontSize:10, padding:'2px 6px', border:'1px solid #2A2A2A', borderRadius:6, background:'#1A1A1A', color:'#666', outline:'none', fontFamily:'inherit', cursor:'pointer' }}>
+              <option value="name">A → Z</option>
+              <option value="recent">Newest first</option>
+              <option value="status">By status</option>
+            </select>
+          </div>
         </div>
 
         {loadingL ? <div style={{ padding:32, textAlign:'center' }}><Spinner color="#F4622A"/></div>
-          : filtered.length===0 ? <Empty icon="👩" title="No learners yet" action={<button style={btn('primary')} onClick={()=>setShowAdd(true)}>+ Add</button>}/>
-          : filtered.map(l=>(
+          : filtered.length===0 ? (
+            <div style={{ padding:'32px 16px', textAlign:'center' }}>
+              <div style={{ fontSize:24, marginBottom:8, opacity:.3 }}>🔍</div>
+              <div style={{ fontSize:12, color:'#555' }}>No learners match</div>
+              {(search||filterStatus!=='all') && <button onClick={()=>{setSearch('');setFilterStatus('all')}} style={{ marginTop:8, fontSize:11, color:'#F4622A', background:'none', border:'none', cursor:'pointer', fontFamily:'inherit' }}>Clear filters</button>}
+            </div>
+          ) : filtered.map(l=>(
             <div key={l.id} onClick={()=>{ setSelLid(l.id); setSelGid(null); setGarments([]); setCollections([]); setTab('garments') }}
               style={{ padding:'10px 14px', cursor:'pointer', borderBottom:'1px solid #1A1A1A', borderLeft:`3px solid ${selLid===l.id?'#F4622A':'transparent'}`, background:selLid===l.id?'#1A1A1A':'transparent' }}>
               <div style={{ display:'flex', alignItems:'center', gap:9 }}>
                 {l.photo_url
                   ? <img src={l.photo_url} alt="" style={{ width:28, height:28, borderRadius:'50%', objectFit:'cover', flexShrink:0 }}/>
                   : <Avatar name={l.name} size={28}/>}
-                <div style={{ minWidth:0 }}>
-                  <div style={{ fontSize:13, fontWeight:500, color:'#ddd', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{l.name}</div>
-                  <div style={{ fontSize:11, color:'#555', marginTop:1 }}>
-                    {l.brand||'No brand'} · <StatusBadge status={l.status}/>
-                    {l.subscription_status==='expired'&&<span style={{ marginLeft:4, fontSize:10, color:'#991B1B', fontWeight:500 }}>⚠ Sub expired</span>}
-                    {l.subscription_status==='trial'&&<span style={{ marginLeft:4, fontSize:10, color:'#92400E', fontWeight:500 }}>🎁 Trial</span>}
-                    {l.subscription_status==='active'&&<span style={{ marginLeft:4, fontSize:10, color:'#0D6B3A', fontWeight:500 }}>✓ Active</span>}
+                <div style={{ minWidth:0, flex:1 }}>
+                  <div style={{ display:'flex', alignItems:'center', gap:5 }}>
+                    <div style={{ fontSize:13, fontWeight:500, color:'#ddd', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{l.name}</div>
+                    {l.is_demo && <span style={{ fontSize:9, background:'#4C1D95', color:'#C4B5FD', padding:'1px 5px', borderRadius:99, flexShrink:0 }}>DEMO</span>}
                   </div>
+                  <div style={{ fontSize:11, color:'#555', marginTop:1, display:'flex', alignItems:'center', gap:4 }}>
+                    <span style={{ whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis', maxWidth:90 }}>{l.brand||'No brand'}</span>
+                    <span>·</span>
+                    <StatusBadge status={l.status}/>
+                    {l.subscription_status==='active'&&<span style={{ fontSize:9, color:'#0D6B3A' }}>✓</span>}
+                    {l.subscription_status==='trial'&&<span style={{ fontSize:9, color:'#92400E' }}>🎁</span>}
+                    {l.subscription_status==='expired'&&<span style={{ fontSize:9, color:'#991B1B' }}>⚠</span>}
+                  </div>
+                  {l.location && <div style={{ fontSize:10, color:'#3A3A3A', marginTop:1 }}>📍 {l.location}</div>}
                 </div>
               </div>
             </div>
