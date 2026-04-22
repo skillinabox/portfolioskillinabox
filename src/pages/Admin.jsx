@@ -619,7 +619,7 @@ export default function Admin() {
                 </div>
                 <CertificateManager learner={learner} toast={toast}/>
                 <PasswordManager learner={learner} toast={toast}/>
-                <DeleteLearner learner={learner} toast={toast} onDeleted={()=>{ setSelLid(null); loadLearners() }}/>
+                <DeleteLearner learner={learner} toast={toast} onDeleted={()=>{ setSelLid(null); loadLearners() }} onToggleDemo={()=>updateLearner({ is_demo: !learner.is_demo })}/>
               </div>
             )}
 
@@ -1368,7 +1368,7 @@ function PasswordManager({ learner, toast }) {
 }
 
 // ── Delete Learner ────────────────────────────────────────────
-function DeleteLearner({ learner, toast, onDeleted }) {
+function DeleteLearner({ learner, toast, onDeleted, onToggleDemo }) {
   const [confirm, setConfirm] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [typed, setTyped] = useState('')
@@ -1403,9 +1403,8 @@ function DeleteLearner({ learner, toast, onDeleted }) {
         </div>
         <button onClick={async(e)=>{
           e.stopPropagation()
-          const val = !learner.is_demo
-          updateLearner({ is_demo: val })
-          toast(val ? '🎭 Demo mode ON — no API costs' : 'Demo mode OFF — live API enabled', 'success')
+          await onToggleDemo()
+          toast(!learner.is_demo ? '🎭 Demo mode ON — no API costs' : 'Demo mode OFF — live API enabled', 'success')
         }} style={{ padding:'7px 16px', fontSize:12, fontWeight:600, borderRadius:8, border:'none', background: learner.is_demo ? '#5B21B6' : '#E9D5FF', color: learner.is_demo ? '#fff' : '#5B21B6', cursor:'pointer', fontFamily:'inherit', flexShrink:0 }}>
           {learner.is_demo ? 'Turn OFF' : 'Turn ON'}
         </button>
