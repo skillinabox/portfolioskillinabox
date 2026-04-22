@@ -287,7 +287,8 @@ export default function Learner() {
         {[['garments','My garments',`${garments.length} pieces`],
           ['collections','Collections',`${collections.length} created`],
           ['enquiries','Enquiries',`${unread} unread`],
-          ['website','My website',learner.status==='published'?'Live ✓':'Awaiting publish'],
+          ['website','My website',learner.status==='published'?'Live ✓':'Not published'],
+          ['profile','My profile','Edit your details'],
           ['subscription','Subscription', hasAccess ? (activeSub?.status==='trial'?'Free trial':'Active ✓') : subStatus==='expired'?'⚠ Expired':'Not subscribed']].map(([id,label,sub])=>(
           <div key={id} onClick={()=>setTab(id)}
             style={{ padding:'12px 14px', cursor:'pointer', borderBottom:'1px solid #1A1A1A', borderLeft:`3px solid ${tab===id?'#F4622A':id==='subscription'&&!hasAccess?'#F4622A44':'transparent'}`, background:tab===id?'#1A1A1A':id==='subscription'&&!hasAccess?'rgba(244,98,42,.05)':'transparent', display:'flex', alignItems:'center', justifyContent:'space-between' }}>
@@ -413,12 +414,21 @@ export default function Learner() {
                               </div>
                             ))}
                             <div style={{ fontSize:11, fontWeight:600, color:'#aaa', textTransform:'uppercase', letterSpacing:'.05em', margin:'14px 0 10px' }}>Pricing & availability</div>
-                            {[['Price (₹)','price'],['Sizes','sizes'],['Availability','availability']].map(([l,f])=>(
-                              <div key={f} style={{ display:'flex', alignItems:'center', gap:8, marginBottom:8 }}>
-                                <span style={{ fontSize:11, color:'#aaa', width:90, flexShrink:0 }}>{l}</span>
-                                <div style={{ flex:1, fontSize:13, padding:'5px 9px', border:'1px solid #E2E0DC', borderRadius:7, background:'#FAFAFA', color:'#555', minHeight:30 }}>{f==='price'&&garment[f]?`₹${Number(garment[f]).toLocaleString('en-IN')}`:garment[f]||'—'}</div>
-                              </div>
-                            ))}
+                            <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:8 }}>
+                              <span style={{ fontSize:11, color:'#aaa', width:90, flexShrink:0 }}>Price (₹)</span>
+                              <input type="number" value={garment.price||''} onChange={e=>updateGarment(garment.id,{price:e.target.value})}
+                                placeholder="Enter price" style={{ flex:1, fontSize:13, padding:'5px 9px', border:'1px solid #E2E0DC', borderRadius:7, background:'#fff', fontFamily:'inherit' }}/>
+                            </div>
+                            <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:8 }}>
+                              <span style={{ fontSize:11, color:'#aaa', width:90, flexShrink:0 }}>Sizes</span>
+                              <input value={garment.sizes||''} onChange={e=>updateGarment(garment.id,{sizes:e.target.value})}
+                                placeholder="S, M, L, XL" style={{ flex:1, fontSize:13, padding:'5px 9px', border:'1px solid #E2E0DC', borderRadius:7, background:'#fff', fontFamily:'inherit' }}/>
+                            </div>
+                            <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:8 }}>
+                              <span style={{ fontSize:11, color:'#aaa', width:90, flexShrink:0 }}>Availability</span>
+                              <input value={garment.availability||''} onChange={e=>updateGarment(garment.id,{availability:e.target.value})}
+                                placeholder="Made to order" style={{ flex:1, fontSize:13, padding:'5px 9px', border:'1px solid #E2E0DC', borderRadius:7, background:'#fff', fontFamily:'inherit' }}/>
+                            </div>
                             <div style={{ marginTop:12 }}>
                               <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:6 }}>
                                 <span style={{ fontSize:11, color:'#aaa' }}>Description</span>
@@ -475,6 +485,12 @@ export default function Learner() {
                     <div style={{ fontSize:12, color:'#aaa', marginTop:2 }}>{col.season} {col.year} · {garmentsByCol[col.id]?.length||0} garments</div>
                   </div>
                   <button style={{ ...btn(), fontSize:11 }} onClick={()=>handleGenColDesc(col)}>✦ LIA description</button>
+                  <button onClick={async()=>{
+                    if(!confirm(`Delete "${col.name}" collection? Garments inside will not be deleted.`)) return
+                    await supabase.from('collections').delete().eq('id', col.id)
+                    mutC(cs => cs.filter(c => c.id !== col.id))
+                    toast('Collection deleted','success')
+                  }} style={{ ...btn(), fontSize:11, color:'#991B1B', borderColor:'#FCA5A5' }}>Delete</button>
                 </div>
                 <div style={{ padding:'12px 16px 0' }}>
                   <textarea value={col.description} onChange={e=>updateCollection(col.id,{description:e.target.value})}
@@ -626,7 +642,7 @@ export default function Learner() {
                         style={{ ...btn(), textDecoration:'none' }}>
                         Share on Instagram
                       </a>
-                      <PublishButton learner={learner} garments={garments} hasAccess={hasAccess} onPublished={slug=>{ setLearner(p=>({...p,status:'published',slug})) }} toast={toast}/>
+                      <PublishButton learner={learner} garments={garments} hasAccess={hasAccess} onPublished={slug=>{ setLearner(p=>({...p,status:'published',slug})) }} onUnpublished={()=>setLearner(p=>({...p,status:'in-progress'}))} toast={toast}/>
                     </div>
                   </div>
                 ) : (
@@ -637,7 +653,7 @@ export default function Learner() {
                     <div style={{ fontSize:13, color:'#888', lineHeight:1.6, maxWidth:320, margin:'0 auto 20px' }}>
                       {garments.filter(g=>g.status==='tagged').length} tagged garments ready to publish.
                     </div>
-                    <PublishButton learner={learner} garments={garments} hasAccess={hasAccess} onPublished={slug=>{ setLearner(p=>({...p,status:'published',slug})) }} toast={toast}/>
+                    <PublishButton learner={learner} garments={garments} hasAccess={hasAccess} onPublished={slug=>{ setLearner(p=>({...p,status:'published',slug})) }} onUnpublished={()=>setLearner(p=>({...p,status:'in-progress'}))} toast={toast}/>
                   </div>
                 )}
               </div>
@@ -666,6 +682,10 @@ export default function Learner() {
           )}
 
           {/* SUBSCRIPTION */}
+          {tab==='profile' && (
+            <LearnerProfileTab learner={learner} onUpdate={async(patch)=>{ await supabase.from('learners').update(patch).eq('id',learner.id); setLearner(p=>({...p,...patch})) }} toast={toast}/>
+          )}
+
           {tab==='subscription' && (
             <div style={{ display:'flex', flexDirection:'column', gap:0 }}>
               <SubscriptionPage
@@ -736,8 +756,18 @@ function getPortfolioUrl(slug) {
   return `https://${slug}.${SUBDOMAIN_BASE}`
 }
 
-function PublishButton({ learner, garments, hasAccess, onPublished, toast }) {
+function PublishButton({ learner, garments, hasAccess, onPublished, onUnpublished, toast }) {
   const [publishing, setPublishing] = useState(false)
+
+  async function handleUnpublish() {
+    setPublishing(true)
+    try {
+      await supabase.from('learners').update({ status:'in-progress' }).eq('id', learner.id)
+      if (onUnpublished) onUnpublished()
+      toast('Portfolio unpublished', 'success')
+    } catch(e) { toast(e.message||'Failed', 'error') }
+    setPublishing(false)
+  }
 
   async function handlePublish() {
     if (!hasAccess) return
@@ -756,10 +786,18 @@ function PublishButton({ learner, garments, hasAccess, onPublished, toast }) {
   }
 
   return (
-    <button onClick={handlePublish} disabled={publishing||!hasAccess}
-      style={{ display:'inline-flex', alignItems:'center', gap:6, padding:'9px 20px', fontSize:13, fontWeight:600, background: hasAccess?'#F4622A':'#ccc', border:'none', borderRadius:10, color:'#fff', cursor:hasAccess?'pointer':'not-allowed', fontFamily:'inherit' }}>
-      {publishing ? <><Spinner size={13} color="#fff"/> Publishing…</> : learner.status==='published' ? '↻ Republish' : '↗ Publish portfolio'}
-    </button>
+    <div style={{ display:'inline-flex', gap:8 }}>
+      <button onClick={handlePublish} disabled={publishing||!hasAccess}
+        style={{ display:'inline-flex', alignItems:'center', gap:6, padding:'9px 20px', fontSize:13, fontWeight:600, background: hasAccess?'#F4622A':'#ccc', border:'none', borderRadius:10, color:'#fff', cursor:hasAccess?'pointer':'not-allowed', fontFamily:'inherit' }}>
+        {publishing ? <><Spinner size={13} color="#fff"/> Publishing…</> : learner.status==='published' ? '↻ Republish' : '↗ Publish portfolio'}
+      </button>
+      {learner.status==='published' && onUnpublished && (
+        <button onClick={handleUnpublish} disabled={publishing}
+          style={{ display:'inline-flex', alignItems:'center', gap:6, padding:'9px 16px', fontSize:13, fontWeight:500, background:'transparent', border:'1px solid #E2E0DC', borderRadius:10, color:'#888', cursor:'pointer', fontFamily:'inherit' }}>
+          Unpublish
+        </button>
+      )}
+    </div>
   )
 }
 
@@ -856,6 +894,132 @@ function UpgradeModal({ feature, used, limit, onClose, onUpgrade }) {
           <button onClick={onUpgrade} style={{ flex:2, padding:'12px', fontSize:13, fontWeight:600, background:'#F4622A', border:'none', borderRadius:10, color:'#fff', cursor:'pointer', fontFamily:'inherit', boxShadow:'0 4px 16px rgba(244,98,42,.25)' }}>
             See plans & upgrade →
           </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ── Learner Profile Tab ───────────────────────────────────────
+function LearnerProfileTab({ learner, onUpdate, toast }) {
+  const [certs,    setCerts]    = useState([])
+  const [adding,   setAdding]   = useState(false)
+  const [certForm, setCertForm] = useState({ name:'', issuer:'Skillinabox', issued_on:'' })
+  const [uploading,setUploading]= useState(false)
+  const fileRef = useRef()
+
+  useEffect(() => {
+    supabase.from('certificates').select('*').eq('learner_id', learner.id).order('display_order')
+      .then(({ data }) => setCerts(data || []))
+  }, [learner.id])
+
+  async function addCert() {
+    if (!certForm.name) { toast('Enter certificate name', 'error'); return }
+    const { data } = await supabase.from('certificates').insert({ learner_id: learner.id, ...certForm, display_order: certs.length }).select().single()
+    setCerts(c => [...c, data])
+    setCertForm({ name:'', issuer:'Skillinabox', issued_on:'' })
+    setAdding(false)
+    toast('Certificate added ✓', 'success')
+  }
+
+  async function uploadCertImage(certId, file) {
+    setUploading(true)
+    try {
+      const ext = file.name.split('.').pop()
+      const path = `${learner.id}/cert-${certId}.${ext}`
+      const { error } = await supabase.storage.from('garments').upload(path, file, { upsert: true })
+      if (error) throw error
+      const { data: { publicUrl } } = supabase.storage.from('garments').getPublicUrl(path)
+      await supabase.from('certificates').update({ image_url: publicUrl }).eq('id', certId)
+      setCerts(c => c.map(x => x.id === certId ? { ...x, image_url: publicUrl } : x))
+      toast('Certificate image uploaded ✓', 'success')
+    } catch(e) { toast(e.message, 'error') }
+    setUploading(false)
+  }
+
+  async function deleteCert(id) {
+    await supabase.from('certificates').delete().eq('id', id)
+    setCerts(c => c.filter(x => x.id !== id))
+    toast('Deleted', 'success')
+  }
+
+  const inp = { width:'100%', fontSize:13, padding:'7px 10px', border:'1px solid #E2E0DC', borderRadius:8, outline:'none', fontFamily:'inherit', background:'#fff' }
+  const s = (style={}) => ({ display:'inline-flex', alignItems:'center', gap:5, padding:'6px 12px', fontSize:11, fontWeight:500, borderRadius:7, border:'1px solid #E2E0DC', cursor:'pointer', fontFamily:'inherit', background:'#fff', ...style })
+
+  return (
+    <div style={{ display:'flex', flexDirection:'column', gap:14 }}>
+      {/* Personal info — name/email/phone frozen */}
+      <div style={{ background:'#fff', border:'1px solid #E8E6E2', borderRadius:12, overflow:'hidden' }}>
+        <div style={{ padding:'12px 16px', borderBottom:'1px solid #F0EEE9', display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+          <div style={{ fontSize:13, fontWeight:600 }}>My profile</div>
+          <div style={{ fontSize:11, color:'#aaa' }}>Contact admin to change name, email & phone</div>
+        </div>
+        <div style={{ padding:'14px 16px', display:'grid', gridTemplateColumns:'1fr 1fr', gap:10 }}>
+          {/* Frozen fields */}
+          {[['Full name', learner.name], ['Email', learner.email], ['Phone', learner.phone]].map(([l,v]) => (
+            <div key={l}>
+              <div style={{ fontSize:11, color:'#aaa', marginBottom:4 }}>{l} <span style={{ fontSize:9, background:'#F0EEE9', color:'#aaa', padding:'1px 6px', borderRadius:99 }}>locked</span></div>
+              <div style={{ fontSize:13, padding:'7px 10px', border:'1px solid #F0EEE9', borderRadius:8, background:'#FAFAFA', color:'#888' }}>{v||'—'}</div>
+            </div>
+          ))}
+          {/* Editable fields */}
+          {[['Brand / Label name','brand'],['Tagline','tagline'],['Speciality','speciality'],['Location','location'],['Years experience','years_exp'],['Instagram','instagram']].map(([l,f]) => (
+            <div key={f}>
+              <div style={{ fontSize:11, color:'#aaa', marginBottom:4 }}>{l}</div>
+              <input value={learner[f]||''} onChange={e=>onUpdate({[f]:e.target.value})} style={inp} placeholder={`Enter ${l.toLowerCase()}`}/>
+            </div>
+          ))}
+          <div style={{ gridColumn:'1/-1' }}>
+            <div style={{ fontSize:11, color:'#aaa', marginBottom:4 }}>Bio</div>
+            <textarea value={learner.bio||''} onChange={e=>onUpdate({bio:e.target.value})} rows={3}
+              style={{ ...inp, resize:'vertical' }} placeholder="Tell your story…"/>
+          </div>
+          <div style={{ gridColumn:'1/-1' }}>
+            <div style={{ fontSize:11, color:'#aaa', marginBottom:4 }}>Skills (comma separated)</div>
+            <input value={learner.skills||''} onChange={e=>onUpdate({skills:e.target.value})} style={inp} placeholder="Embroidery, Pattern Making, Draping"/>
+          </div>
+          <div style={{ gridColumn:'1/-1' }}>
+            <div style={{ fontSize:11, color:'#aaa', marginBottom:4 }}>Expertise areas</div>
+            <textarea value={learner.expertise||''} onChange={e=>onUpdate({expertise:e.target.value})} rows={2}
+              style={{ ...inp, resize:'vertical' }} placeholder="Bridal Wear, Sustainable Fashion…"/>
+          </div>
+        </div>
+      </div>
+
+      {/* Certificates */}
+      <div style={{ background:'#fff', border:'1px solid #E8E6E2', borderRadius:12, overflow:'hidden' }}>
+        <div style={{ padding:'12px 16px', borderBottom:'1px solid #F0EEE9', display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+          <div style={{ fontSize:13, fontWeight:600 }}>Certificates & credentials</div>
+          <button onClick={()=>setAdding(a=>!a)} style={s({ background:'#F4622A', borderColor:'#F4622A', color:'#fff' })}>{adding ? '✕ Cancel' : '+ Add'}</button>
+        </div>
+        <div style={{ padding:'12px 16px' }}>
+          {adding && (
+            <div style={{ background:'#F7F6F4', borderRadius:8, padding:12, marginBottom:12, display:'flex', flexDirection:'column', gap:8 }}>
+              {[['Certificate name *','name','e.g. Fashion Design Diploma'],['Issuing body','issuer','e.g. Skillinabox'],['Date issued','issued_on','e.g. March 2025']].map(([l,k,ph])=>(
+                <div key={k}>
+                  <div style={{ fontSize:10, color:'#aaa', marginBottom:3 }}>{l}</div>
+                  <input value={certForm[k]} onChange={e=>setCertForm(p=>({...p,[k]:e.target.value}))} placeholder={ph} style={inp}/>
+                </div>
+              ))}
+              <button onClick={addCert} style={s({ background:'#F4622A', borderColor:'#F4622A', color:'#fff', justifyContent:'center', padding:'8px' })}>Add certificate</button>
+            </div>
+          )}
+          {certs.length === 0 && !adding && <div style={{ fontSize:12, color:'#bbb', fontStyle:'italic' }}>No certificates yet</div>}
+          {certs.map(cert => (
+            <div key={cert.id} style={{ display:'flex', gap:10, alignItems:'center', padding:'8px 0', borderBottom:'1px solid #F5F3F0' }}>
+              <div onClick={()=>{ const inp2 = document.createElement('input'); inp2.type='file'; inp2.accept='image/*'; inp2.onchange=e=>{if(e.target.files[0])uploadCertImage(cert.id,e.target.files[0])}; inp2.click() }}
+                style={{ width:44, height:44, borderRadius:6, border:'1.5px dashed #D0CCC8', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', overflow:'hidden', background:'#F9F8F7', flexShrink:0 }} title="Upload image">
+                {cert.image_url ? <img src={cert.image_url} alt="" style={{ width:'100%', height:'100%', objectFit:'cover' }}/> : <span style={{ fontSize:16, opacity:.4 }}>📜</span>}
+              </div>
+              <div style={{ flex:1 }}>
+                <div style={{ fontSize:13, fontWeight:600 }}>{cert.name}</div>
+                <div style={{ fontSize:11, color:'#888' }}>{cert.issuer}{cert.issued_on ? ` · ${cert.issued_on}` : ''}</div>
+                {!cert.image_url && <div style={{ fontSize:10, color:'#bbb' }}>Tap the icon to upload certificate image</div>}
+              </div>
+              <button onClick={()=>deleteCert(cert.id)} style={s({ color:'#991B1B', borderColor:'#FCA5A5' })}>✕</button>
+            </div>
+          ))}
+          {uploading && <div style={{ fontSize:11, color:'#F4622A', marginTop:6, display:'flex', alignItems:'center', gap:5 }}><Spinner size={11} color="#F4622A"/> Uploading…</div>}
         </div>
       </div>
     </div>
@@ -966,7 +1130,11 @@ function LearnerPoseSection({ garment, hasAccess, onUpdate, onUpgrade, toast }) 
             <div style={{ fontSize:12, color:'#888', marginTop:2 }}>
               {hasAccess ? `${(garment.gender||'female')==='male'?'Male':'Female'} model · tap to select, then generate` : 'Subscribe to generate model photos'}
             </div>
-            {hasPending && <div style={{ fontSize:11, color:'#F4622A', marginTop:4, display:'flex', alignItems:'center', gap:5 }}><Spinner size={11} color="#F4622A"/> Generating — safe to switch screens</div>}
+            {hasPending && <div style={{ fontSize:11, color:'#F4622A', marginTop:4, display:'flex', alignItems:'center', gap:8 }}>
+              <Spinner size={11} color="#F4622A"/> Generating — safe to switch screens
+              <button onClick={async()=>{ clearInterval(pollRef.current); await onUpdate(garment.id,{pending_poses:{}}); toast('Cleared — you can regenerate','success') }}
+                style={{ fontSize:10, color:'#888', background:'none', border:'1px solid #E2E0DC', borderRadius:5, padding:'2px 8px', cursor:'pointer', fontFamily:'inherit' }}>Clear stuck</button>
+            </div>}
           </div>
           {hasAccess ? (
             <div style={{ display:'flex', gap:6, flexWrap:'wrap' }}>

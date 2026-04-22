@@ -177,9 +177,9 @@ export default function Portfolio({ subdomainSlug }) {
               </div>
             </div>
           </div>
-          <div style={{ display:'flex', gap:24, alignItems:'center' }}>
+          <div className="portfolio-nav-links" style={{ display:'flex', gap:24, alignItems:'center' }}>
             {NAV.map(n=><button key={n} className={`nl ${activeNav===n?'on':''}`} onClick={()=>scrollTo(n)}>{n.charAt(0).toUpperCase()+n.slice(1)}</button>)}
-            <button onClick={()=>openEnquiry('general')} style={{ padding:'9px 20px', fontSize:13, fontWeight:600, background:G, color:'#fff', border:'none', borderRadius:8, cursor:'pointer', fontFamily:'inherit', marginLeft:8 }}>Get in touch</button>
+            <button onClick={()=>openEnquiry('general')} className="portfolio-nav-cta" style={{ padding:'9px 20px', fontSize:13, fontWeight:600, background:G, color:'#fff', border:'none', borderRadius:8, cursor:'pointer', fontFamily:'inherit', marginLeft:8 }}>Get in touch</button>
           </div>
         </div>
       </nav>
@@ -190,7 +190,7 @@ export default function Portfolio({ subdomainSlug }) {
         <div style={{ position:'absolute', top:'15%', right:'8%', width:500, height:500, borderRadius:'50%', background:`radial-gradient(circle,rgba(244,98,42,.1) 0%,transparent 65%)`, pointerEvents:'none' }}/>
 
         <div style={{ maxWidth:1100, margin:'0 auto', padding:'80px 24px', position:'relative', width:'100%' }}>
-          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:72, alignItems:'center' }}>
+          <div className="hero-grid" style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:72, alignItems:'center' }}>
             <div className="fu">
               <div style={{ fontSize:11, fontWeight:600, color:G, letterSpacing:'.14em', textTransform:'uppercase', marginBottom:20 }}>Skillinabox Graduate · Fashion Designer</div>
               <h1 style={{ fontFamily:"'DM Serif Display',serif", fontSize:'clamp(36px,5.5vw,68px)', color:'#fff', lineHeight:1.08, marginBottom:20 }}>{learner.brand||learner.name}</h1>
@@ -210,7 +210,7 @@ export default function Portfolio({ subdomainSlug }) {
             </div>
 
             {/* Garment stack */}
-            <div style={{ position:'relative', height:520 }}>
+            <div className="hero-stack" style={{ position:'relative', height:520 }}>
               {garments.slice(0,3).map((g,i)=>(
                 <div key={g.id} style={{ position:'absolute', width:i===0?'78%':i===1?'62%':'52%', top:`${i*8}%`, right:`${i*-5}%`, borderRadius:16, overflow:'hidden', boxShadow:`0 ${24-i*6}px ${80-i*20}px rgba(0,0,0,.${5+i})`, border:'1px solid rgba(255,255,255,.07)', transform:`rotate(${i*2.5}deg)`, zIndex:3-i }}>
                   <div style={{ paddingBottom:'125%', position:'relative', background:'#1A1A1A' }}>
@@ -302,7 +302,7 @@ export default function Portfolio({ subdomainSlug }) {
       <section id="about" style={{ padding:'96px 24px', background:'#0F0F0F', position:'relative', overflow:'hidden' }}>
         <div style={{ position:'absolute', inset:0, backgroundImage:`linear-gradient(rgba(244,98,42,.04) 1px,transparent 1px),linear-gradient(90deg,rgba(244,98,42,.04) 1px,transparent 1px)`, backgroundSize:'48px 48px' }}/>
         <div style={{ maxWidth:1100, margin:'0 auto', position:'relative' }}>
-          <div style={{ display:'grid', gridTemplateColumns:'5fr 6fr', gap:80, alignItems:'center' }}>
+          <div className="about-grid" style={{ display:'grid', gridTemplateColumns:'5fr 6fr', gap:80, alignItems:'center' }}>
             <div>
               <div style={{ aspectRatio:'3/4', borderRadius:20, overflow:'hidden', background:'#1A1A1A', border:'1px solid rgba(255,255,255,.07)', display:'flex', alignItems:'center', justifyContent:'center', position:'relative' }}>
                 {learner.photo_url
@@ -324,7 +324,7 @@ export default function Portfolio({ subdomainSlug }) {
               <p style={{ fontSize:15, color:'#666', lineHeight:1.9, marginBottom:32 }}>
                 {learner.bio||`${learner.name} is a passionate fashion designer and proud graduate of the Skillinabox Fashion Design Programme. With a deep love for craftsmanship and an eye for detail, ${learner.name.split(' ')[0]} creates garments that celebrate the richness of Indian textiles while embracing contemporary design sensibilities.`}
               </p>
-              <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12, marginBottom:36 }}>
+              <div className="about-meta-grid" style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12, marginBottom:36 }}>
                 {[['Location',learner.location||'India'],['Speciality',learner.speciality||'Fashion Design'],['Training','Skillinabox Programme'],['Collections',`${allSections.length} published`]].map(([l,v])=>(
                   <div key={l} style={{ padding:'14px 16px', background:'rgba(255,255,255,.04)', borderRadius:10, border:'1px solid rgba(255,255,255,.05)' }}>
                     <div style={{ fontSize:11, color:'#444', marginBottom:4 }}>{l}</div>
@@ -369,7 +369,7 @@ export default function Portfolio({ subdomainSlug }) {
               </div>
             ))}
           </div>
-          <div style={{ padding:'32px 40px', background:'#111', borderRadius:16, display:'flex', alignItems:'center', justifyContent:'space-between', gap:24, flexWrap:'wrap' }}>
+          <div className="expertise-banner" style={{ padding:'32px 40px', background:'#111', borderRadius:16, display:'flex', alignItems:'center', justifyContent:'space-between', gap:24, flexWrap:'wrap' }}>
             <div>
               <div style={{ fontSize:10, color:'#444', letterSpacing:'.1em', textTransform:'uppercase', marginBottom:8 }}>Trained & certified at</div>
               <div style={{ fontFamily:"'DM Serif Display',serif", fontSize:22, color:'#fff', marginBottom:4 }}>Skillinabox Fashion Design Programme</div>

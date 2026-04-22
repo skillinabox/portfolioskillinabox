@@ -27,6 +27,7 @@ export default function Admin() {
 
   const [learners,     setLearners]     = useState([])
   const [selLid,       setSelLid]       = useState(() => localStorage.getItem('snb_selLid') || null)
+  const [sidebarOpen,  setSidebarOpen]  = useState(false)
   const [collections,  setCollections]  = useState([])
   const [garments,     setGarments]     = useState([])
   const [enquiries,    setEnquiries]    = useState([])
@@ -186,6 +187,13 @@ export default function Admin() {
     toast(`Portfolio live at ${getPortfolioUrl(slug)}`, 'success')
   }
 
+  async function handleUnpublish() {
+    if (!learner) return
+    await supabase.from('learners').update({ status: 'in-progress' }).eq('id', selLid)
+    mutL(ls => ls.map(l => l.id === selLid ? { ...l, status: 'in-progress' } : l))
+    toast('Portfolio unpublished', 'success')
+  }
+
   async function addLearner(form) {
     const { data, error } = await supabase.from('learners').insert({ name: form.name, email: form.email, brand: form.brand, phone: form.phone }).select().single()
     if (error) { toast(error.message, 'error'); return }
@@ -222,10 +230,21 @@ export default function Admin() {
   const unreadEnq = enquiries.filter(e => !e.read).length
 
   return (
-    <div style={{ display:'grid', gridTemplateRows:'56px 1fr', gridTemplateColumns:'256px 1fr', height:'100vh', overflow:'hidden', fontFamily:"'DM Sans',sans-serif" }}>
+    <div className="layout" style={{ fontFamily:"'DM Sans',sans-serif" }}>
+
+      {/* Mobile sidebar overlay */}
+      <div className={`sidebar-overlay ${sidebarOpen?'open':''}`} onClick={()=>setSidebarOpen(false)}/>
 
       {/* Topbar */}
-      <header style={{ gridColumn:'1/-1', display:'flex', alignItems:'center', gap:12, padding:'0 24px', background:'#0F0F0F', borderBottom:'1px solid #1E1E1E', zIndex:10 }}>
+      <header className="topbar" style={{ gridColumn:'1/-1', zIndex:10 }}>
+        {/* Hamburger — mobile only */}
+        <button onClick={()=>setSidebarOpen(o=>!o)}
+          style={{ display:'none', flexDirection:'column', gap:4, background:'none', border:'none', cursor:'pointer', padding:4, marginRight:4 }}
+          className="hamburger">
+          <span style={{ width:18, height:2, background:'#888', borderRadius:2, display:'block' }}/>
+          <span style={{ width:18, height:2, background:'#888', borderRadius:2, display:'block' }}/>
+          <span style={{ width:18, height:2, background:'#888', borderRadius:2, display:'block' }}/>
+        </button>
         <SIBLogo dark={true}/>
         <div style={{ width:1, height:24, background:'#2A2A2A', margin:'0 8px' }}/>
         <span style={{ fontSize:11, color:'#555', background:'#1A1A1A', padding:'2px 8px', borderRadius:99, border:'1px solid #2A2A2A' }}>Admin</span>
@@ -245,7 +264,7 @@ export default function Admin() {
       </header>
 
       {/* Sidebar */}
-      <aside style={{ background:'#131313', borderRight:'1px solid #1E1E1E', overflowY:'auto', display:'flex', flexDirection:'column' }}>
+      <aside className={`sidebar ${sidebarOpen?'open':''}`}>
         <div style={{ padding:'10px 12px 8px', borderBottom:'1px solid #1E1E1E' }}>
           <div style={{ display:'flex', gap:8, marginBottom:8 }}>
             <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Name, brand, city, email, phone…"
@@ -281,7 +300,7 @@ export default function Admin() {
               {(search||filterStatus!=='all') && <button onClick={()=>{setSearch('');setFilterStatus('all')}} style={{ marginTop:8, fontSize:11, color:'#F4622A', background:'none', border:'none', cursor:'pointer', fontFamily:'inherit' }}>Clear filters</button>}
             </div>
           ) : filtered.map(l=>(
-            <div key={l.id} onClick={()=>{ setSelLid(l.id); setSelGid(null); setGarments([]); setCollections([]); setTab('garments') }}
+            <div key={l.id} onClick={()=>{ setSelLid(l.id); setSelGid(null); setGarments([]); setCollections([]); setTab('garments'); setSidebarOpen(false) }}
               style={{ padding:'10px 14px', cursor:'pointer', borderBottom:'1px solid #1A1A1A', borderLeft:`3px solid ${selLid===l.id?'#F4622A':'transparent'}`, background:selLid===l.id?'#1A1A1A':'transparent' }}>
               <div style={{ display:'flex', alignItems:'center', gap:9 }}>
                 {l.photo_url
@@ -308,7 +327,7 @@ export default function Admin() {
       </aside>
 
       {/* Main */}
-      <main style={{ overflowY:'auto', padding:24, background:'#F7F6F4' }}>
+      <main className="main" style={{ overflowY:'auto', background:'#F7F6F4' }}>
         {!learner ? <Empty icon="←" title="Select a learner" message="Choose from the sidebar"/> : (
           <div style={{ maxWidth:900, display:'flex', flexDirection:'column', gap:16 }}>
 
@@ -345,6 +364,9 @@ export default function Admin() {
                   <button style={{ ...btn('primary'), fontSize:13, padding:'9px 20px' }} disabled={publishing||garments.length===0} onClick={()=>setShowPubConf(true)}>
                     {publishing ? <><Spinner size={13} color="#fff"/> Publishing…</> : learner.status==='published'?'↻ Republish':'↗ Publish'}
                   </button>
+                  {learner.status==='published' && (
+                    <button style={{ ...btn(), fontSize:12 }} onClick={handleUnpublish}>Unpublish</button>
+                  )}
                 </div>
               </div>
 

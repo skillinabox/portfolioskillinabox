@@ -120,3 +120,93 @@ input, select, textarea, button { font-family: inherit; font-size: inherit; }
 .sib-bar { height: 3px; border-radius: 2px; }
 .sib-name { font-family: 'DM Serif Display', serif; font-size: 15px; color: var(--white); letter-spacing: .01em; }
 .sib-tag  { font-size: 10px; color: var(--mid); letter-spacing: .04em; text-transform: uppercase; }
+
+/* ── Mobile Responsive ─────────────────────────────────────── */
+@media (max-width: 768px) {
+
+  /* Admin layout — sidebar becomes drawer */
+  .layout {
+    grid-template-columns: 1fr !important;
+    grid-template-rows: 56px 1fr !important;
+  }
+  .sidebar {
+    position: fixed !important;
+    top: 56px; left: 0; bottom: 0;
+    width: 80vw; max-width: 300px;
+    z-index: 50;
+    transform: translateX(-100%);
+    transition: transform .25s ease;
+    box-shadow: 4px 0 24px rgba(0,0,0,.4);
+  }
+  .sidebar.open { transform: translateX(0); }
+  .sidebar-overlay {
+    display: none;
+    position: fixed; inset: 0; top: 56px;
+    background: rgba(0,0,0,.5);
+    z-index: 49;
+  }
+  .sidebar-overlay.open { display: block; }
+  .main { padding: 16px !important; }
+
+  /* Topbar */
+  .topbar { padding: 0 16px !important; gap: 8px !important; }
+
+  /* Cards */
+  .card-head { flex-wrap: wrap; gap: 8px; }
+
+  /* Toasts */
+  .toasts { bottom: 16px; right: 12px; left: 12px; }
+  .toast { min-width: unset; }
+}
+
+@media (max-width: 480px) {
+  .main { padding: 12px !important; }
+  .topbar { padding: 0 12px !important; }
+}
+
+/* Hamburger — show only on mobile */
+@media (max-width: 768px) {
+  .hamburger { display: flex !important; }
+  .sidebar { background: #131313; border-right: 1px solid #1E1E1E; display: flex; flex-direction: column; }
+}
+
+/* Portfolio mobile fixes */
+@media (max-width: 768px) {
+  /* Nav */
+  .portfolio-nav-links { display: none !important; }
+  .portfolio-nav-cta { padding: 8px 14px !important; font-size: 12px !important; }
+
+  /* Hero — stack columns */
+  .hero-grid { grid-template-columns: 1fr !important; gap: 40px !important; }
+  .hero-stack { display: none !important; } /* hide garment stack on mobile */
+  .hero-title { font-size: clamp(32px, 8vw, 52px) !important; }
+  .hero-stats { gap: 24px !important; margin-top: 36px !important; }
+
+  /* About — stack */
+  .about-grid { grid-template-columns: 1fr !important; gap: 40px !important; }
+  .about-photo { aspect-ratio: 4/3 !important; }
+  .about-meta-grid { grid-template-columns: 1fr 1fr !important; }
+
+  /* Expertise */
+  .expertise-banner { padding: 24px 20px !important; flex-direction: column !important; gap: 20px !important; }
+
+  /* Contact */
+  .contact-grid { grid-template-columns: 1fr !important; }
+
+  /* General sections */
+  .section-heading { font-size: 32px !important; }
+  .section-pad { padding: 64px 20px !important; }
+}
+
+@media (max-width: 480px) {
+  .section-pad { padding: 48px 16px !important; }
+  .section-heading { font-size: 28px !important; }
+}
+
+/* Learner dashboard mobile */
+@media (max-width: 768px) {
+  .learner-layout { grid-template-columns: 1fr !important; }
+  .pose-grid { grid-template-columns: repeat(2, 1fr) !important; }
+  .garment-grid { grid-template-columns: 1fr !important; }
+  .tryon-grid { grid-template-columns: 1fr !important; }
+}
