@@ -235,7 +235,7 @@ export default function Learner() {
         <SIBLogo dark={true}/>
         <div style={{ marginLeft:'auto', display:'flex', gap:8, alignItems:'center' }}>
           {learner.status==='published'&&learner.slug&&(
-            <a href={`/portfolio/${learner.slug}`} target="_blank" rel="noreferrer" style={{ ...btn(), textDecoration:'none', background:'#E6F4EC', borderColor:'#52B27A', color:'#0D6B3A', fontSize:12 }}>↗ View my portfolio</a>
+            <a href={getPortfolioUrl(learner.slug)} target="_blank" rel="noreferrer" style={{ ...btn(), textDecoration:'none', background:'#E6F4EC', borderColor:'#52B27A', color:'#0D6B3A', fontSize:12 }}>↗ View my portfolio</a>
           )}
           <button style={{ ...btn('ghost'), color:'#888' }} onClick={signOut}>Sign out</button>
         </div>
@@ -586,7 +586,7 @@ export default function Learner() {
                     </div>
                   </div>
                   {learner.status==='published' && learner.slug && (
-                    <a href={`/portfolio/${learner.slug}`} target="_blank" rel="noreferrer"
+                    <a href={getPortfolioUrl(learner.slug)} target="_blank" rel="noreferrer"
                       style={{ ...btn(), textDecoration:'none', background:'#E6F4EC', borderColor:'#52B27A', color:'#0D6B3A' }}>
                       View live ↗
                     </a>
@@ -612,12 +612,12 @@ export default function Learner() {
                     <div style={{ background:'#F7F6F4', borderRadius:9, padding:'12px 16px', display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:12 }}>
                       <div>
                         <div style={{ fontSize:11, color:'#aaa', marginBottom:3 }}>Your portfolio URL</div>
-                        <div style={{ fontSize:14, fontWeight:600, color:'#1D4ED8' }}>{window.location.origin}/portfolio/{learner.slug}</div>
+                        <div style={{ fontSize:14, fontWeight:600, color:'#1D4ED8' }}>{getPortfolioUrl(learner.slug)}</div>
                       </div>
-                      <button style={btn()} onClick={()=>{ navigator.clipboard.writeText(`${window.location.origin}/portfolio/${learner.slug}`); toast('Copied!','success') }}>Copy</button>
+                      <button style={btn()} onClick={()=>{ navigator.clipboard.writeText(getPortfolioUrl(learner.slug)); toast('Copied!','success') }}>Copy</button>
                     </div>
                     <div style={{ display:'flex', gap:8, flexWrap:'wrap' }}>
-                      <a href={`https://wa.me/?text=${encodeURIComponent(`Check out my fashion portfolio: ${window.location.origin}/portfolio/${learner.slug}`)}`}
+                      <a href={`https://wa.me/?text=${encodeURIComponent(`Check out my fashion portfolio: ${getPortfolioUrl(learner.slug)}`)}`}
                         target="_blank" rel="noreferrer"
                         style={{ ...btn(), textDecoration:'none', background:'#E6F4EC', borderColor:'#52B27A', color:'#0D6B3A' }}>
                         Share on WhatsApp
@@ -648,8 +648,8 @@ export default function Learner() {
                   <div style={chead}><div style={{ fontSize:13, fontWeight:600 }}>Share kit</div><div style={{ fontSize:12, color:'#888' }}>Ready-made captions to copy</div></div>
                   <div style={{ padding:'12px 16px', display:'flex', flexDirection:'column', gap:8 }}>
                     {[
-                      ['WhatsApp caption', `Hi! Check out my fashion portfolio 👗✨\n${window.location.origin}/portfolio/${learner.slug}\nEnquiries welcome!`],
-                      ['Instagram bio link', `${window.location.origin}/portfolio/${learner.slug}`],
+                      ['WhatsApp caption', `Hi! Check out my fashion portfolio 👗✨\n${getPortfolioUrl(learner.slug)}\nEnquiries welcome!`],
+                      ['Instagram bio link', getPortfolioUrl(learner.slug)],
                     ].map(([label, text])=>(
                       <div key={label} style={{ background:'#F7F6F4', borderRadius:8, padding:'10px 12px' }}>
                         <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:6 }}>
@@ -729,6 +729,13 @@ export default function Learner() {
 }
 
 // ── Publish Button ─────────────────────────────────────────────
+function getPortfolioUrl(slug) {
+  // On houseofentreprenaari.com → use subdomain format
+  // Otherwise use path format
+  const SUBDOMAIN_BASE = 'houseofentreprenaari.com'
+  return `https://${slug}.${SUBDOMAIN_BASE}`
+}
+
 function PublishButton({ learner, garments, hasAccess, onPublished, toast }) {
   const [publishing, setPublishing] = useState(false)
 

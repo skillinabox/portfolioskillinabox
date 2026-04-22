@@ -140,7 +140,36 @@ function AutoRedirect() {
   return <Navigate to={profile?.role === 'admin' ? '/admin' : '/dashboard'} replace />
 }
 
+// Detect if running on a student subdomain e.g. arzu.houseofentreprenaari.com
+function getSubdomainSlug() {
+  const host = window.location.hostname
+  const knownHosts = ['portfolioskillinabox.vercel.app', 'portfolio.skillinabox.in', 'localhost', '127.0.0.1']
+  if (knownHosts.some(h => host === h || host.endsWith('.vercel.app'))) return null
+  // Check for *.houseofentreprenaari.com or any custom wildcard
+  const parts = host.split('.')
+  if (parts.length >= 3) {
+    // subdomain.domain.tld — return the subdomain as slug
+    return parts[0]
+  }
+  return null
+}
+
 export default function App() {
+  const subdomainSlug = getSubdomainSlug()
+
+  // If on a student subdomain, render Portfolio directly
+  if (subdomainSlug) {
+    return (
+      <BrowserRouter>
+        <ToastProvider>
+          <Routes>
+            <Route path="*" element={<Portfolio subdomainSlug={subdomainSlug} />} />
+          </Routes>
+        </ToastProvider>
+      </BrowserRouter>
+    )
+  }
+
   return (
     <BrowserRouter>
       <AuthProvider>

@@ -4,6 +4,11 @@ import { grantFreeTrial, getPlans, getActiveSubscription, getUsage, currentMonth
 import { useAuth } from '../App'
 import { SIBLogo, Avatar, StatusBadge, GarmentThumb, Modal, Empty, Spinner, useToast } from '../components/ui'
 
+function getPortfolioUrl(slug) {
+  return `https://${slug}.houseofentreprenaari.com`
+}
+
+
 const MEASUREMENT_FIELDS = ['Bust','Waist','Hips','Shoulder','Sleeve length','Front length','Back length','Inseam','Thigh','Calf']
 const SEASONS = ['Any','Spring','Summer','Monsoon','Festive','Winter','Bridal']
 
@@ -178,7 +183,7 @@ export default function Admin() {
     await supabase.from('learners').update({ status: 'published', slug }).eq('id', selLid)
     mutL(ls => ls.map(l => l.id === selLid ? { ...l, status: 'published', slug } : l))
     setPublishing(false)
-    toast(`Portfolio live at /portfolio/${slug}`, 'success')
+    toast(`Portfolio live at ${getPortfolioUrl(slug)}`, 'success')
   }
 
   async function addLearner(form) {
@@ -233,7 +238,7 @@ export default function Admin() {
           ))}
         </div>
         <div style={{ marginLeft:'auto', display:'flex', gap:8 }}>
-          {learner?.slug && <a href={`/portfolio/${learner.slug}`} target="_blank" rel="noreferrer" style={{ ...btn('ghost'), color:'#888', textDecoration:'none', fontSize:12 }}>View site ↗</a>}
+          {learner?.slug && <a href={getPortfolioUrl(learner.slug)} target="_blank" rel="noreferrer" style={{ ...btn('ghost'), color:'#888', textDecoration:'none', fontSize:12 }}>View site ↗</a>}
           <button style={{ ...btn(), fontSize:12 }} onClick={()=>setShowPlans(true)}>⚙ Plans & offers</button>
           <button style={btn('ghost')} onClick={signOut}>Sign out</button>
         </div>

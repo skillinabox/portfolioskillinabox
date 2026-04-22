@@ -5,8 +5,9 @@ import { Spinner } from '../components/ui'
 
 const MEASUREMENTS = ['Bust','Waist','Hips','Shoulder','Sleeve length','Front length','Back length','Inseam','Thigh','Calf']
 
-export default function Portfolio() {
-  const { slug, learnerId } = useParams()
+export default function Portfolio({ subdomainSlug }) {
+  const { slug: routeSlug, learnerId } = useParams()
+  const slug = subdomainSlug || routeSlug
   const location = useLocation()
   const isPreview = !!learnerId || location.pathname.includes('/preview/')
   const [lightbox,   setLightbox]   = useState(null)
