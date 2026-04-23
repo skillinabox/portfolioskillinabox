@@ -428,22 +428,19 @@ export default function Admin() {
                           toast('LIA is re-reading garment…', 'default')
                           mutG(gs => gs.map(x => x.id === garment.id ? { ...x, status:'tagging' } : x))
                           try {
-                            const imgRes = await fetch(garment.image_url)
-                            const blob = await imgRes.blob()
-                            const base64 = await new Promise((res, rej) => {
-                              const reader = new FileReader()
-                              reader.onload = e => res(e.target.result.split(',')[1])
-                              reader.onerror = rej
-                              reader.readAsDataURL(blob)
+                            const res = await fetch('/api/tag-garment', {
+                              method: 'POST', headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({ image_url: garment.image_url, demo_mode: learner?.is_demo || false }),
                             })
-                            const tags = await tagGarment(base64, blob.type, learner?.is_demo || false)
+                            const tags = await res.json()
+                            if (tags.error) throw new Error(tags.error)
                             const updates = { ...tags, status:'tagged', ai_tagged: true }
                             await supabase.from('garments').update(updates).eq('id', garment.id)
                             mutG(gs => gs.map(x => x.id === garment.id ? { ...x, ...updates } : x))
                             toast('LIA re-tagged ✓', 'success')
                           } catch(e) {
                             mutG(gs => gs.map(x => x.id === garment.id ? { ...x, status:'tagged' } : x))
-                            toast('Re-tagging failed', 'error')
+                            toast(e.message || 'Re-tagging failed', 'error')
                           }
                         }}>
                         ✦ Re-tag with LIA

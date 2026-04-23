@@ -68,10 +68,23 @@ export default async function handler(req, res) {
     }
 
     // ── Tag garment from image ────────────────────────────────
-    if (!body.image_base64 || !body.mime_type) return res.status(400).json({ error: 'Missing image' })
+    // Accept either base64 directly, or an image_url the server will fetch
+    let imageBase64 = body.image_base64
+    let mimeType    = body.mime_type || 'image/jpeg'
+
+    if (!imageBase64 && body.image_url) {
+      // Fetch image server-side to avoid client CORS issues
+      const imgRes = await fetch(body.image_url)
+      if (!imgRes.ok) return res.status(400).json({ error: 'Could not fetch garment image' })
+      const buffer = await imgRes.arrayBuffer()
+      imageBase64 = Buffer.from(buffer).toString('base64')
+      mimeType = imgRes.headers.get('content-type') || 'image/jpeg'
+    }
+
+    if (!imageBase64) return res.status(400).json({ error: 'Missing image' })
 
     const text = await callClaude([{ role: 'user', content: [
-      { type: 'image', source: { type: 'base64', media_type: body.mime_type, data: body.image_base64 } },
+      { type: 'image', source: { type: 'base64', media_type: mimeType, data: imageBase64 } },
       { type: 'text', text: `Fashion expert for an Indian fashion platform. Analyse this garment and return ONLY valid JSON, no other text:
 {"name":"full descriptive garment name","category":"one of: Indian wear — Anarkali | Indian wear — Saree | Indian wear — Lehenga | Indian wear — Kurti set | Indian wear — Salwar suit | Western wear — Dress | Western wear — Top | Western wear — Coord set | Fusion | Bridal wear | Menswear — Kurta | Menswear — Sherwani | Menswear — Suit | Menswear — Casual","fabric":"fabric types","features":"2-4 key features comma separated","colour":"primary colours","occasion":"occasions comma separated","description":"2 sentence premium product description","gender":"female or male based on the garment style and target wearer"}` }
     ]}], 700)

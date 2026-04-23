@@ -377,21 +377,18 @@ export default function Learner() {
                             toast('LIA is re-reading your garment…', 'default')
                             updateGarment(garment.id, { status:'tagging' })
                             try {
-                              const imgRes = await fetch(garment.image_url)
-                              const blob = await imgRes.blob()
-                              const base64 = await new Promise((res, rej) => {
-                                const reader = new FileReader()
-                                reader.onload = e => res(e.target.result.split(',')[1])
-                                reader.onerror = rej
-                                reader.readAsDataURL(blob)
+                              const res = await fetch('/api/tag-garment', {
+                                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ image_url: garment.image_url, demo_mode: learner?.is_demo || false }),
                               })
-                              const tags = await tagGarment(base64, blob.type, learner?.is_demo || false)
+                              const tags = await res.json()
+                              if (tags.error) throw new Error(tags.error)
                               const updates = { ...tags, status:'tagged', ai_tagged: true }
                               await updateGarment(garment.id, updates)
                               toast('LIA re-tagged ✓', 'success')
                             } catch(e) {
                               updateGarment(garment.id, { status:'tagged' })
-                              toast('Re-tagging failed — try again', 'error')
+                              toast(e.message || 'Re-tagging failed — try again', 'error')
                             }
                           }}>
                           ✦ Re-tag with LIA
