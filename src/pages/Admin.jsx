@@ -420,8 +420,34 @@ export default function Admin() {
                       <div style={{ fontSize:14, fontWeight:600 }}>{garment.name||'Garment details'}</div>
                       <div style={{ fontSize:12, color:'#888', marginTop:2 }}>{garment.ai_tagged?'LIA auto-filled · all fields editable':'Fill in details'}</div>
                     </div>
-                    <div style={{ display:'flex', gap:8, alignItems:'center' }}>
+                    <div style={{ display:'flex', gap:6, alignItems:'center', flexWrap:'wrap' }}>
                       <StatusBadge status={garment.status}/>
+                      <button style={{ fontSize:11, padding:'4px 10px', borderRadius:6, border:'1px solid #DDD6FE', background:'#F5F3FF', color:'#5B21B6', cursor:'pointer', fontFamily:'inherit' }}
+                        onClick={async()=>{
+                          if (!garment.image_url) { toast('No image to tag', 'error'); return }
+                          toast('LIA is re-reading garment…', 'default')
+                          mutG(gs => gs.map(x => x.id === garment.id ? { ...x, status:'tagging' } : x))
+                          try {
+                            const imgRes = await fetch(garment.image_url)
+                            const blob = await imgRes.blob()
+                            const base64 = await new Promise((res, rej) => {
+                              const reader = new FileReader()
+                              reader.onload = e => res(e.target.result.split(',')[1])
+                              reader.onerror = rej
+                              reader.readAsDataURL(blob)
+                            })
+                            const tags = await tagGarment(base64, blob.type, learner?.is_demo || false)
+                            const updates = { ...tags, status:'tagged', ai_tagged: true }
+                            await supabase.from('garments').update(updates).eq('id', garment.id)
+                            mutG(gs => gs.map(x => x.id === garment.id ? { ...x, ...updates } : x))
+                            toast('LIA re-tagged ✓', 'success')
+                          } catch(e) {
+                            mutG(gs => gs.map(x => x.id === garment.id ? { ...x, status:'tagged' } : x))
+                            toast('Re-tagging failed', 'error')
+                          }
+                        }}>
+                        ✦ Re-tag with LIA
+                      </button>
                       <button onClick={async()=>{
                         if(!confirm(`Delete "${garment.name}"? This cannot be undone.`)) return
                         await supabase.from('garments').delete().eq('id',garment.id)

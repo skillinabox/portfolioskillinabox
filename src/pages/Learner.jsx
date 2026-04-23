@@ -369,8 +369,33 @@ export default function Learner() {
                         <div style={{ fontSize:14, fontWeight:600 }}>{garment.name||'Garment details'}</div>
                         <div style={{ fontSize:12, color:'#888', marginTop:2 }}>{garment.ai_tagged ? 'LIA auto-filled · all fields editable' : 'Fill in your garment details'}</div>
                       </div>
-                      <div style={{ display:'flex', gap:8, alignItems:'center' }}>
+                      <div style={{ display:'flex', gap:6, alignItems:'center', flexWrap:'wrap' }}>
                         <StatusBadge status={garment.status}/>
+                        <button style={{ ...btn(), fontSize:11, color:'#5B21B6', borderColor:'#DDD6FE', background:'#F5F3FF' }}
+                          onClick={async()=>{
+                            if (!garment.image_url) { toast('No image to tag', 'error'); return }
+                            toast('LIA is re-reading your garment…', 'default')
+                            updateGarment(garment.id, { status:'tagging' })
+                            try {
+                              const imgRes = await fetch(garment.image_url)
+                              const blob = await imgRes.blob()
+                              const base64 = await new Promise((res, rej) => {
+                                const reader = new FileReader()
+                                reader.onload = e => res(e.target.result.split(',')[1])
+                                reader.onerror = rej
+                                reader.readAsDataURL(blob)
+                              })
+                              const tags = await tagGarment(base64, blob.type, learner?.is_demo || false)
+                              const updates = { ...tags, status:'tagged', ai_tagged: true }
+                              await updateGarment(garment.id, updates)
+                              toast('LIA re-tagged ✓', 'success')
+                            } catch(e) {
+                              updateGarment(garment.id, { status:'tagged' })
+                              toast('Re-tagging failed — try again', 'error')
+                            }
+                          }}>
+                          ✦ Re-tag with LIA
+                        </button>
                         <button style={btn()} onClick={()=>{ setEditingGid(garment.id); setEditForm({}) }}>Edit details</button>
                         <button onClick={async()=>{
                           if(!confirm(`Delete "${garment.name}"? This cannot be undone.`)) return
