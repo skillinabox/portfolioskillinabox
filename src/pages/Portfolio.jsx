@@ -260,7 +260,8 @@ export default function Portfolio({ subdomainSlug }) {
                 {items.map(g=>{
                   const ALL_POSE_KEYS = ['front','back','left','right','walking','sitting','closeup','outdoor','side'] // 'side' for legacy
                   const poseUrls = g.poses ? ALL_POSE_KEYS.filter(k=>g.poses[k]).map(k=>g.poses[k]) : []
-                  const allImgs = [g.image_url, ...poseUrls].filter(Boolean)
+                  const ownPhotoUrls = (g.own_photos||[]).map(p=>p.url).filter(Boolean)
+                  const allImgs = [g.image_url, ...poseUrls, ...ownPhotoUrls].filter(Boolean)
                   return (
                   <div key={g.id} className="gc">
                     <div onClick={()=>allImgs.length>0&&setLightbox({ images:allImgs, index:0 })}
@@ -280,18 +281,21 @@ export default function Portfolio({ subdomainSlug }) {
                         <span style={{ fontSize:11, color:'#888', background:'#F0EDEA', padding:'4px 12px', borderRadius:99 }}>{g.availability||'Made to order'}</span>
                       </div>
                       {g.occasion&&<div style={{ fontSize:12, color:'#bbb', marginTop:8 }}>For: {g.occasion}</div>}
-                      {g.poses && Object.values(g.poses).some(Boolean) && (() => {
+                      {(() => {
                         const ALL_POSE_KEYS = ['front','back','left','right','walking','sitting','closeup','outdoor','side']
-                        const poseImgs = ALL_POSE_KEYS.filter(k=>g.poses[k]).map(k=>({ key:k, url:g.poses[k] }))
-                        const allImgsLocal = [g.image_url, ...poseImgs.map(p=>p.url)].filter(Boolean)
+                        const poseImgs = g.poses ? ALL_POSE_KEYS.filter(k=>g.poses[k]).map(k=>({ key:k, url:g.poses[k] })) : []
+                        const ownImgs  = (g.own_photos||[]).filter(p=>p.url).map(p=>({ key:`own-${p.url}`, url:p.url, caption:p.caption }))
+                        const allThumbImgs = [...poseImgs, ...ownImgs]
+                        const allImgsLocal = [g.image_url, ...poseImgs.map(p=>p.url), ...ownImgs.map(p=>p.url)].filter(Boolean)
+                        if (allThumbImgs.length === 0) return null
                         return (
                           <div style={{ marginTop:12, paddingTop:12, borderTop:'1px solid #F0EEE9' }}>
-                            <div style={{ fontSize:11, color:'#aaa', marginBottom:6 }}>Model views · <span style={{ color:'#F4622A' }}>tap to view</span></div>
+                            <div style={{ fontSize:11, color:'#aaa', marginBottom:6 }}>Photos · <span style={{ color:G }}>tap to view</span></div>
                             <div style={{ display:'flex', gap:5, flexWrap:'wrap' }}>
-                              {poseImgs.map((p, i) => (
+                              {allThumbImgs.map((p, i) => (
                                 <div key={p.key} onClick={e=>{e.stopPropagation();setLightbox({ images:allImgsLocal, index:i+1 })}}
                                   style={{ width:'calc(25% - 4px)', borderRadius:7, overflow:'hidden', aspectRatio:'3/4', cursor:'pointer', position:'relative', flexShrink:0 }}>
-                                  <img src={p.url} alt={p.key} style={{ width:'100%', height:'100%', objectFit:'cover', display:'block' }}/>
+                                  <img src={p.url} alt={p.caption||p.key} style={{ width:'100%', height:'100%', objectFit:'cover', display:'block' }}/>
                                 </div>
                               ))}
                             </div>

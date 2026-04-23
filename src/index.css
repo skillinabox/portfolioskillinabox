@@ -210,3 +210,7 @@ input, select, textarea, button { font-family: inherit; font-size: inherit; }
   .garment-grid { grid-template-columns: 1fr !important; }
   .tryon-grid { grid-template-columns: 1fr !important; }
 }
+
+/* Garment card delete button — show on hover */
+.garment-delete-btn { opacity: 0; transition: opacity .15s; }
+div:hover > .garment-delete-btn { opacity: 1; }
