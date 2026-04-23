@@ -1160,14 +1160,28 @@ function LearnerProfileTab({ learner, onUpdate, toast }) {
 }
 
 // ── Own Photo Uploader ─────────────────────────────────────────
-// Lets learner upload their own model/lifestyle photos instead of using LIA
+const OWN_PHOTO_LABELS = [
+  { key:'front',    label:'Front view',  icon:'👗' },
+  { key:'back',     label:'Back view',   icon:'🔄' },
+  { key:'left',     label:'3/4 Left',    icon:'↖'  },
+  { key:'right',    label:'3/4 Right',   icon:'↗'  },
+  { key:'walking',  label:'Walking',     icon:'🚶' },
+  { key:'sitting',  label:'Sitting',     icon:'🪑' },
+  { key:'closeup',  label:'Close-up',    icon:'🔍' },
+  { key:'outdoor',  label:'Outdoor',     icon:'🌿' },
+  { key:'detail',   label:'Detail shot', icon:'✦'  },
+  { key:'lifestyle',label:'Lifestyle',   icon:'🏙'  },
+  { key:'other',    label:'Other',       icon:'📷'  },
+]
+
 function OwnPhotoUploader({ garment, onUpdate, toast }) {
-  const [uploading, setUploading] = useState(false)
+  const [uploading,  setUploading]  = useState(false)
   const [editingIdx, setEditingIdx] = useState(null)
-  const [editCaption, setEditCaption] = useState('')
+  const [editLabel,  setEditLabel]  = useState('front')
+  const [editCaption,setEditCaption]= useState('')
   const fileRef = useRef()
 
-  const ownPhotos = garment.own_photos || [] // array of { url, caption, label }
+  const ownPhotos = garment.own_photos || []
 
   async function handleUpload(files) {
     setUploading(true)
@@ -1175,11 +1189,11 @@ function OwnPhotoUploader({ garment, onUpdate, toast }) {
     for (const file of Array.from(files)) {
       try {
         const ext = file.name.split('.').pop()
-        const path = `${garment.learner_id}/${garment.id}-own-${Date.now()}.${ext}`
+        const path = `${garment.learner_id}/${garment.id}-own-${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`
         const { error } = await supabase.storage.from('garments').upload(path, file, { upsert: false })
         if (error) throw error
         const { data: { publicUrl } } = supabase.storage.from('garments').getPublicUrl(path)
-        newPhotos.push({ url: publicUrl, caption: '', label: `Photo ${newPhotos.length + 1}` })
+        newPhotos.push({ url: publicUrl, label: 'other', caption: '' })
       } catch(e) { toast(e.message, 'error') }
     }
     await onUpdate(garment.id, { own_photos: newPhotos })
@@ -1193,60 +1207,73 @@ function OwnPhotoUploader({ garment, onUpdate, toast }) {
     toast('Photo removed', 'success')
   }
 
-  async function saveCaption(idx) {
-    const updated = ownPhotos.map((p,i) => i===idx ? { ...p, caption: editCaption } : p)
+  async function saveEdit(idx) {
+    const updated = ownPhotos.map((p,i) => i===idx ? { ...p, label: editLabel, caption: editCaption } : p)
     await onUpdate(garment.id, { own_photos: updated })
     setEditingIdx(null)
-    toast('Caption saved ✓', 'success')
+    toast('Saved ✓', 'success')
   }
 
   return (
     <div>
       <div style={{ fontSize:12, color:'#888', marginBottom:10, lineHeight:1.6 }}>
-        Upload your own model photos, lifestyle shots, or detail images. These will appear in the portfolio lightbox.
+        Upload your own photoshoot images. Tap ✏ on each photo to choose the pose type.
       </div>
 
-      {/* Upload button */}
       <div onClick={()=>fileRef.current?.click()}
         style={{ border:'2px dashed #E2E0DC', borderRadius:10, padding:'16px', textAlign:'center', cursor:'pointer', marginBottom:12, background:'#FAFAFA', transition:'border-color .15s' }}
         onMouseOver={e=>e.currentTarget.style.borderColor='#F4622A'}
         onMouseOut={e=>e.currentTarget.style.borderColor='#E2E0DC'}>
         {uploading ? <><Spinner size={16} color="#F4622A"/> <span style={{ fontSize:12, color:'#aaa', marginLeft:6 }}>Uploading…</span></>
-          : <><div style={{ fontSize:20, opacity:.4, marginBottom:4 }}>📷</div><div style={{ fontSize:12, color:'#aaa' }}>Click to upload photos · Multiple allowed</div></>}
+          : <><div style={{ fontSize:20, opacity:.4, marginBottom:4 }}>📷</div><div style={{ fontSize:12, color:'#aaa' }}>Click to upload · Multiple allowed</div></>}
       </div>
       <input ref={fileRef} type="file" accept="image/*" multiple style={{ display:'none' }}
         onChange={e=>{ if(e.target.files?.length) handleUpload(e.target.files); e.target.value='' }}/>
 
-      {/* Photo grid */}
       {ownPhotos.length > 0 && (
         <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(120px,1fr))', gap:8 }}>
-          {ownPhotos.map((photo, idx) => (
-            <div key={idx} style={{ borderRadius:8, overflow:'hidden', border:'1px solid #E8E6E2', background:'#FAFAFA' }}>
-              <div style={{ position:'relative', aspectRatio:'3/4' }}>
-                <img src={photo.url} alt={photo.label} style={{ width:'100%', height:'100%', objectFit:'cover', display:'block' }}/>
-                <div style={{ position:'absolute', top:4, right:4, display:'flex', gap:3 }}>
-                  <button onClick={()=>{ setEditingIdx(idx); setEditCaption(photo.caption||'') }}
-                    style={{ width:20, height:20, borderRadius:'50%', background:'rgba(0,0,0,.6)', border:'none', color:'#fff', fontSize:10, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center' }}>✏</button>
-                  <button onClick={()=>deletePhoto(idx)}
-                    style={{ width:20, height:20, borderRadius:'50%', background:'rgba(0,0,0,.6)', border:'none', color:'#fff', fontSize:11, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', fontWeight:700 }}>×</button>
-                </div>
-              </div>
-              {editingIdx === idx ? (
-                <div style={{ padding:6 }}>
-                  <input value={editCaption} onChange={e=>setEditCaption(e.target.value)} placeholder="Add caption…"
-                    style={{ width:'100%', fontSize:10, padding:'4px 6px', border:'1px solid #E2E0DC', borderRadius:5, outline:'none', fontFamily:'inherit', marginBottom:4 }}/>
-                  <div style={{ display:'flex', gap:3 }}>
-                    <button onClick={()=>saveCaption(idx)} style={{ flex:1, fontSize:9, padding:'3px', background:'#F4622A', border:'none', borderRadius:4, color:'#fff', cursor:'pointer', fontFamily:'inherit' }}>Save</button>
-                    <button onClick={()=>setEditingIdx(null)} style={{ flex:1, fontSize:9, padding:'3px', background:'#F0EEE9', border:'none', borderRadius:4, color:'#888', cursor:'pointer', fontFamily:'inherit' }}>Cancel</button>
+          {ownPhotos.map((photo, idx) => {
+            const meta = OWN_PHOTO_LABELS.find(l=>l.key===photo.label) || OWN_PHOTO_LABELS.find(l=>l.key==='other')
+            return (
+              <div key={idx} style={{ borderRadius:8, overflow:'hidden', border:'1px solid #E8E6E2', background:'#FAFAFA' }}>
+                <div style={{ position:'relative', aspectRatio:'3/4' }}>
+                  <img src={photo.url} alt={meta.label} style={{ width:'100%', height:'100%', objectFit:'cover', display:'block' }}/>
+                  <div style={{ position:'absolute', bottom:0, left:0, right:0, padding:'4px 6px', background:'linear-gradient(to top,rgba(0,0,0,.7),transparent)' }}>
+                    <span style={{ fontSize:9, color:'#fff', fontWeight:500 }}>{meta.icon} {meta.label}</span>
+                  </div>
+                  <div style={{ position:'absolute', top:4, right:4, display:'flex', gap:3 }}>
+                    <button onClick={()=>{ setEditingIdx(idx); setEditLabel(photo.label||'other'); setEditCaption(photo.caption||'') }}
+                      style={{ width:20, height:20, borderRadius:'50%', background:'rgba(0,0,0,.6)', border:'none', color:'#fff', fontSize:10, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center' }}>✏</button>
+                    <button onClick={()=>deletePhoto(idx)}
+                      style={{ width:20, height:20, borderRadius:'50%', background:'rgba(0,0,0,.6)', border:'none', color:'#fff', fontSize:11, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', fontWeight:700 }}>×</button>
                   </div>
                 </div>
-              ) : (
-                <div style={{ padding:'5px 7px', fontSize:10, color:'#aaa', lineHeight:1.3 }}>
-                  {photo.caption || <span style={{ fontStyle:'italic' }}>No caption</span>}
-                </div>
-              )}
-            </div>
-          ))}
+                {editingIdx === idx ? (
+                  <div style={{ padding:6, background:'#F7F6F4' }}>
+                    <div style={{ fontSize:9, color:'#aaa', marginBottom:3 }}>Shot type</div>
+                    <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:2, marginBottom:5 }}>
+                      {OWN_PHOTO_LABELS.map(l => (
+                        <button key={l.key} onClick={()=>setEditLabel(l.key)}
+                          style={{ fontSize:9, padding:'3px 4px', borderRadius:4, border:`1px solid ${editLabel===l.key?'#F4622A':'#E2E0DC'}`, background:editLabel===l.key?'#FEF0EA':'#fff', color:editLabel===l.key?'#C94E1E':'#555', cursor:'pointer', fontFamily:'inherit', textAlign:'left' }}>
+                          {l.icon} {l.label}
+                        </button>
+                      ))}
+                    </div>
+                    <input value={editCaption} onChange={e=>setEditCaption(e.target.value)} placeholder="Optional note…"
+                      style={{ width:'100%', fontSize:10, padding:'4px 6px', border:'1px solid #E2E0DC', borderRadius:4, outline:'none', fontFamily:'inherit', marginBottom:4 }}/>
+                    <div style={{ display:'flex', gap:3 }}>
+                      <button onClick={()=>saveEdit(idx)} style={{ flex:1, fontSize:9, padding:'3px', background:'#F4622A', border:'none', borderRadius:4, color:'#fff', cursor:'pointer', fontFamily:'inherit' }}>Save</button>
+                      <button onClick={()=>setEditingIdx(null)} style={{ flex:1, fontSize:9, padding:'3px', background:'#F0EEE9', border:'none', borderRadius:4, color:'#888', cursor:'pointer', fontFamily:'inherit' }}>Cancel</button>
+                    </div>
+                  </div>
+                ) : (
+                  <div style={{ padding:'4px 6px', fontSize:9, color:'#aaa' }}>
+                    {photo.caption || <span style={{ fontStyle:'italic', color:'#ddd' }}>tap ✏ to label</span>}
+                  </div>
+                )}
+              </div>
+            )
+          })}
         </div>
       )}
     </div>
