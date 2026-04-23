@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { supabase, uploadGarmentImage, uploadProfileImage, tagGarment, generateCollectionDesc, generateGarmentDesc, fileToBase64 } from '../lib/supabase'
 import { checkExpiry, canPerform, incrementUsage, getUsage, getActiveSubscription, getPlans } from '../lib/subscription'
+import { THEMES, DEFAULT_THEME, MAX_THEME_CHANGES } from '../lib/themes'
 import { useAuth } from '../App'
 import { SIBLogo, Avatar, StatusBadge, GarmentThumb, Empty, Spinner, Modal, useToast } from '../components/ui'
 import SubscriptionPage from './Subscription'
@@ -900,6 +901,81 @@ function UpgradeModal({ feature, used, limit, onClose, onUpgrade }) {
   )
 }
 
+// ── Theme Picker ──────────────────────────────────────────────
+function ThemePicker({ learner, onUpdate, toast }) {
+  const currentTheme = learner.theme || DEFAULT_THEME
+  const currentMonth = new Date().toISOString().slice(0,7)
+  const changesThisMonth = learner.theme_change_month === currentMonth
+    ? (learner.theme_changes_this_month || 0) : 0
+  const changesLeft = MAX_THEME_CHANGES - changesThisMonth
+
+  async function selectTheme(key) {
+    if (key === currentTheme) return
+    if (changesLeft <= 0) {
+      toast(`Theme changes limited to ${MAX_THEME_CHANGES} per month. Try again next month.`, 'error')
+      return
+    }
+    await onUpdate({
+      theme: key,
+      theme_changes_this_month: changesThisMonth + 1,
+      theme_change_month: currentMonth,
+    })
+    toast(`Theme changed to ${THEMES[key].name} ✓`, 'success')
+  }
+
+  return (
+    <div style={{ background:'#fff', border:'1px solid #E8E6E2', borderRadius:12, overflow:'hidden' }}>
+      <div style={{ padding:'12px 16px', borderBottom:'1px solid #F0EEE9', display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+        <div>
+          <div style={{ fontSize:13, fontWeight:600 }}>Portfolio theme</div>
+          <div style={{ fontSize:11, color:'#aaa', marginTop:2 }}>Changes your website's colour & style</div>
+        </div>
+        <div style={{ fontSize:11, color: changesLeft<=0?'#C94E1E':'#aaa' }}>
+          {changesLeft} change{changesLeft!==1?'s':''} left this month
+        </div>
+      </div>
+      <div style={{ padding:'14px 16px', display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(140px,1fr))', gap:10 }}>
+        {Object.entries(THEMES).map(([key, theme]) => {
+          const isActive = currentTheme === key
+          return (
+            <div key={key} onClick={()=>selectTheme(key)}
+              style={{ borderRadius:10, overflow:'hidden', border:`2px solid ${isActive?'#F4622A':'#E8E6E2'}`, cursor: changesLeft>0||isActive ? 'pointer' : 'not-allowed', opacity: changesLeft<=0&&!isActive ? .5 : 1, transition:'all .15s' }}>
+              {/* Colour preview */}
+              <div style={{ height:56, background:theme.preview.bg, position:'relative', display:'flex' }}>
+                {/* Hero strip */}
+                <div style={{ width:'45%', background:theme.preview.dark, height:'100%', display:'flex', alignItems:'center', justifyContent:'center' }}>
+                  <div style={{ width:24, height:3, background:theme.preview.accent, borderRadius:2 }}/>
+                </div>
+                {/* Card strip */}
+                <div style={{ flex:1, padding:6, display:'flex', flexDirection:'column', gap:3, justifyContent:'center' }}>
+                  <div style={{ height:5, borderRadius:2, background:theme.preview.text, opacity:.15, width:'80%' }}/>
+                  <div style={{ height:4, borderRadius:2, background:theme.preview.text, opacity:.1, width:'60%' }}/>
+                  <div style={{ height:8, borderRadius:3, background:theme.preview.accent, width:'50%', marginTop:3 }}/>
+                </div>
+                {isActive && (
+                  <div style={{ position:'absolute', top:6, right:6, width:16, height:16, borderRadius:'50%', background:'#F4622A', display:'flex', alignItems:'center', justifyContent:'center' }}>
+                    <span style={{ fontSize:9, color:'#fff', fontWeight:700 }}>✓</span>
+                  </div>
+                )}
+              </div>
+              {/* Label */}
+              <div style={{ padding:'8px 10px', background:'#FAFAFA' }}>
+                <div style={{ fontSize:12, fontWeight:isActive?600:500, color:isActive?'#F4622A':'#333' }}>{theme.name}</div>
+                <div style={{ fontSize:10, color:'#aaa', marginTop:1, lineHeight:1.4 }}>{theme.desc}</div>
+              </div>
+            </div>
+          )
+        })}
+      </div>
+      {changesLeft <= 0 && (
+        <div style={{ padding:'10px 16px', background:'#FEF0EA', borderTop:'1px solid #F0EEE9', fontSize:12, color:'#C94E1E' }}>
+          ⚠ Theme change limit reached for this month. Resets on the 1st.
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ── Learner Profile Tab ───────────────────────────────────────
 function LearnerProfileTab({ learner, onUpdate, toast }) {
   const [certs,    setCerts]    = useState([])
@@ -985,6 +1061,9 @@ function LearnerProfileTab({ learner, onUpdate, toast }) {
           </div>
         </div>
       </div>
+
+      {/* Theme picker */}
+      <ThemePicker learner={learner} onUpdate={onUpdate} toast={toast}/>
 
       {/* Certificates */}
       <div style={{ background:'#fff', border:'1px solid #E8E6E2', borderRadius:12, overflow:'hidden' }}>

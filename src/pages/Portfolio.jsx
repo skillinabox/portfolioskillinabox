@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useParams, useLocation } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { Spinner } from '../components/ui'
+import { THEMES, DEFAULT_THEME } from '../lib/themes'
 
 const MEASUREMENTS = ['Bust','Waist','Hips','Shoulder','Sleeve length','Front length','Back length','Inseam','Thigh','Calf']
 
@@ -121,22 +122,35 @@ export default function Portfolio({ subdomainSlug }) {
 
   const skills    = learner.skills    ? learner.skills.split(',').map(s=>s.trim()).filter(Boolean) : []
   const expertise = learner.expertise ? learner.expertise.split(',').map(s=>s.trim()).filter(Boolean) : []
-  const G = '#F4622A'
+  // Apply theme from learner settings
+  const theme = THEMES[learner.theme || DEFAULT_THEME] || THEMES[DEFAULT_THEME]
+  const T = theme.colors  // T.accent, T.bg, T.heroBg etc.
+  const G = T.accent      // keep G for backward compat
 
   const NAV = ['home','collection','about','expertise','reviews','contact']
 
   return (
     <div style={{ fontFamily:"'DM Sans',system-ui,sans-serif", minHeight:'100vh' }}>
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:wght@300;400;500;600&display=swap');
-        *{box-sizing:border-box;margin:0;padding:0} html{scroll-behavior:smooth} body{background:#F7F6F4}
+        @import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:wght@300;400;500;600&family=Playfair+Display:ital@0;1&display=swap');
+        :root {
+          --accent: ${T.accent};
+          --accent-dark: ${T.accentDark};
+          --hero-bg: ${T.heroBg};
+          --card-bg: ${T.cardBg};
+          --card-border: ${T.cardBorder};
+          --text-primary: ${T.textPrimary};
+          --text-muted: ${T.textMuted};
+          --page-bg: ${T.bg};
+        }
+        *{box-sizing:border-box;margin:0;padding:0} html{scroll-behavior:smooth} body{background:${T.bg}}
         .nl{padding:6px 0;font-size:13px;color:#777;cursor:pointer;border:none;border-bottom:2px solid transparent;background:none;font-family:inherit;transition:all .2s;text-transform:capitalize}
         .nl:hover,.nl.on{color:#fff;border-bottom-color:#F4622A}
-        .gc{background:#fff;border-radius:16px;overflow:hidden;border:1px solid #E8E6E2;transition:transform .25s,box-shadow .25s;cursor:pointer;position:relative}
+        .gc{background:var(--card-bg,#fff);border-radius:16px;overflow:hidden;border:1px solid var(--card-border,#E8E6E2);transition:transform .25s,box-shadow .25s;cursor:pointer;position:relative}
         .gc:hover{transform:translateY(-6px);box-shadow:0 16px 48px rgba(0,0,0,.12)}
         .gc:hover .go{opacity:1;transform:translateY(0)}
         .go{position:absolute;bottom:16px;left:16px;right:16px;background:#F4622A;color:#fff;padding:10px;border-radius:8px;font-size:13px;font-weight:600;text-align:center;opacity:0;transform:translateY(8px);transition:all .25s}
-        .ec{background:#fff;border:1px solid #E8E6E2;border-radius:14px;padding:28px 24px;transition:all .25s}
+        .ec{background:var(--card-bg,#fff);border:1px solid var(--card-border,#E8E6E2);border-radius:14px;padding:28px 24px;transition:all .25s}
         .ec:hover{border-color:#F4622A;transform:translateY(-2px)}
         .inf{width:100%;padding:11px 14px;font-size:14px;border:1px solid #E2E0DC;border-radius:10px;outline:none;transition:border-color .15s;font-family:inherit}
         .inf:focus{border-color:#F4622A}
@@ -156,7 +170,7 @@ export default function Portfolio({ subdomainSlug }) {
       )}
 
       {/* NAV */}
-      <nav style={{ position:'fixed', top: isPreview ? 37 : 0, left:0, right:0, zIndex:100, background:'rgba(10,10,10,.95)', backdropFilter:'blur(16px)', borderBottom:'1px solid rgba(255,255,255,.05)' }}>
+      <nav style={{ position:'fixed', top: isPreview ? 37 : 0, left:0, right:0, zIndex:100, background: T.heroBg==='#0D0D0D' ? 'rgba(13,13,13,.97)' : T.heroBg==='#000000' ? 'rgba(0,0,0,.97)' : T.heroBg==='#081C15' ? 'rgba(8,28,21,.97)' : 'rgba(10,10,10,.95)', backdropFilter:'blur(16px)', borderBottom:'1px solid rgba(255,255,255,.05)' }}>
         <div style={{ maxWidth:1100, margin:'0 auto', padding:'0 24px', display:'flex', alignItems:'center', justifyContent:'space-between', height:58 }}>
           <div style={{ display:'flex', alignItems:'center', gap:12 }}>
             {learner.logo_url ? (
@@ -185,7 +199,7 @@ export default function Portfolio({ subdomainSlug }) {
       </nav>
 
       {/* HERO */}
-      <section id="home" style={{ minHeight:'100vh', background:'#0A0A0A', display:'flex', alignItems:'center', paddingTop: isPreview ? 95 : 58, position:'relative', overflow:'hidden' }}>
+      <section id="home" style={{ minHeight:'100vh', background:T.heroBg, display:'flex', alignItems:'center', paddingTop: isPreview ? 95 : 58, position:'relative', overflow:'hidden' }}>
         <div style={{ position:'absolute', inset:0, backgroundImage:`linear-gradient(rgba(244,98,42,.05) 1px,transparent 1px),linear-gradient(90deg,rgba(244,98,42,.05) 1px,transparent 1px)`, backgroundSize:'56px 56px' }}/>
         <div style={{ position:'absolute', top:'15%', right:'8%', width:500, height:500, borderRadius:'50%', background:`radial-gradient(circle,rgba(244,98,42,.1) 0%,transparent 65%)`, pointerEvents:'none' }}/>
 
@@ -224,7 +238,7 @@ export default function Portfolio({ subdomainSlug }) {
       </section>
 
       {/* COLLECTION */}
-      <section id="collection" style={{ padding:'96px 24px', background:'#F7F6F4' }}>
+      <section id="collection" style={{ padding:'96px 24px', background:T.bg }}>
         <div style={{ maxWidth:1100, margin:'0 auto' }}>
           <div style={{ display:'flex', alignItems:'flex-end', justifyContent:'space-between', marginBottom:56, flexWrap:'wrap', gap:16 }}>
             <div>
@@ -299,7 +313,7 @@ export default function Portfolio({ subdomainSlug }) {
       </section>
 
       {/* ABOUT */}
-      <section id="about" style={{ padding:'96px 24px', background:'#0F0F0F', position:'relative', overflow:'hidden' }}>
+      <section id="about" style={{ padding:'96px 24px', background:T.heroBg, position:'relative', overflow:'hidden' }}>
         <div style={{ position:'absolute', inset:0, backgroundImage:`linear-gradient(rgba(244,98,42,.04) 1px,transparent 1px),linear-gradient(90deg,rgba(244,98,42,.04) 1px,transparent 1px)`, backgroundSize:'48px 48px' }}/>
         <div style={{ maxWidth:1100, margin:'0 auto', position:'relative' }}>
           <div className="about-grid" style={{ display:'grid', gridTemplateColumns:'5fr 6fr', gap:80, alignItems:'center' }}>
@@ -342,7 +356,7 @@ export default function Portfolio({ subdomainSlug }) {
       </section>
 
       {/* EXPERTISE */}
-      <section id="expertise" style={{ padding:'96px 24px', background:'#F7F6F4' }}>
+      <section id="expertise" style={{ padding:'96px 24px', background:T.bg }}>
         <div style={{ maxWidth:1100, margin:'0 auto' }}>
           <div style={{ textAlign:'center', marginBottom:60 }}>
             <div style={{ fontSize:11, fontWeight:600, color:G, letterSpacing:'.12em', textTransform:'uppercase', marginBottom:12 }}>Skills & expertise</div>
@@ -424,7 +438,7 @@ export default function Portfolio({ subdomainSlug }) {
       )}
 
       {/* REVIEWS */}
-      <section id="reviews" style={{ padding:'96px 24px', background:'#0A0A0A' }}>
+      <section id="reviews" style={{ padding:'96px 24px', background:T.heroBg }}>
         <div style={{ maxWidth:1100, margin:'0 auto' }}>
           <div style={{ textAlign:'center', marginBottom:56 }}>
             <div style={{ fontSize:11, fontWeight:600, color:G, letterSpacing:'.12em', textTransform:'uppercase', marginBottom:12 }}>What customers say</div>
@@ -454,7 +468,7 @@ export default function Portfolio({ subdomainSlug }) {
       </section>
 
       {/* CONTACT */}
-      <section id="contact" style={{ padding:'96px 24px', background:'#0A0A0A' }}>
+      <section id="contact" style={{ padding:'96px 24px', background:T.heroBg }}>
         <div style={{ maxWidth:760, margin:'0 auto', textAlign:'center' }}>
           <div style={{ fontSize:11, fontWeight:600, color:G, letterSpacing:'.12em', textTransform:'uppercase', marginBottom:16 }}>Let's work together</div>
           <h2 style={{ fontFamily:"'DM Serif Display',serif", fontSize:52, color:'#fff', lineHeight:1.15, marginBottom:16 }}>Interested in a piece?</h2>
@@ -474,7 +488,7 @@ export default function Portfolio({ subdomainSlug }) {
       </section>
 
       {/* FOOTER */}
-      <div style={{ padding:'20px 24px', background:'#060606', display:'flex', alignItems:'center', justifyContent:'space-between', flexWrap:'wrap', gap:12 }}>
+      <div style={{ padding:'20px 24px', background:T.heroBg, display:'flex', alignItems:'center', justifyContent:'space-between', flexWrap:'wrap', gap:12 }}>
         <div style={{ fontSize:12, color:'#2A2A2A' }}>© {new Date().getFullYear()} {learner.brand||learner.name} · Portfolio by <span style={{ color:G }}>Skillinabox</span></div>
         <div style={{ display:'flex', gap:20 }}>
           {NAV.map(n=><button key={n} onClick={()=>scrollTo(n)} style={{ fontSize:12, color:'#2A2A2A', background:'none', border:'none', cursor:'pointer', fontFamily:'inherit', textTransform:'capitalize' }}>{n}</button>)}
