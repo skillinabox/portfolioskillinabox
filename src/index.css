@@ -216,3 +216,23 @@ div:hover > .garment-delete-btn { opacity: 1; }
   .cert-grid { grid-template-columns: 1fr !important; }
   .plan-grid { grid-template-columns: 1fr !important; }
 }
+
+/* ── Login page mobile ── */
+@media (max-width: 768px) {
+  /* Stack brand panel above form on mobile */
+  .login-brand-panel {
+    display: none !important;
+  }
+  .login-form-panel {
+    padding: 40px 24px !important;
+    min-height: 100vh;
+  }
+}
+
+@media (max-width: 480px) {
+  .login-form-panel {
+    padding: 32px 20px !important;
+    align-items: flex-start !important;
+    padding-top: 48px !important;
+  }
+}

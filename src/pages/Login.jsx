@@ -71,7 +71,7 @@ export default function Login() {
   return (
     <div style={{ display:'flex', minHeight:'100vh', fontFamily:"'DM Sans',sans-serif" }}>
       {/* Left: Brand panel */}
-      <div style={{ width:'45%', background:'#111', display:'flex', flexDirection:'column', justifyContent:'space-between', padding:'48px 44px', position:'relative', overflow:'hidden', flexShrink:0 }}>
+      <div className="login-brand-panel" style={{ width:'45%', background:'#111', display:'flex', flexDirection:'column', justifyContent:'space-between', padding:'48px 44px', position:'relative', overflow:'hidden', flexShrink:0 }}>
         {/* Grid pattern */}
         <div style={{ position:'absolute', inset:0, backgroundImage:'linear-gradient(rgba(244,98,42,.08) 1px, transparent 1px), linear-gradient(90deg, rgba(244,98,42,.08) 1px, transparent 1px)', backgroundSize:'48px 48px' }} />
         {/* Decorative elements */}
@@ -102,7 +102,7 @@ export default function Login() {
       </div>
 
       {/* Right: Form */}
-      <div style={{ flex:1, display:'flex', alignItems:'center', justifyContent:'center', padding:'48px 40px', background:'#F7F6F4' }}>
+      <div className="login-form-panel" style={{ flex:1, display:'flex', alignItems:'center', justifyContent:'center', padding:'48px 40px', background:'#F7F6F4' }}>
         <div style={{ width:'100%', maxWidth:380 }}>
 
           {/* Role selector */}
