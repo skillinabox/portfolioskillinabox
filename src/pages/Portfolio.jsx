@@ -131,8 +131,8 @@ export default function Portfolio({ subdomainSlug }) {
 
   return (
     <div style={{ fontFamily:"'DM Sans',system-ui,sans-serif", minHeight:'100vh' }}>
-      <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:wght@300;400;500;600&family=Playfair+Display:ital@0;1&display=swap');
+      {/* Theme CSS variables — injected separately to allow dynamic values */}
+      <style dangerouslySetInnerHTML={{ __html: `
         :root {
           --accent: ${T.accent};
           --accent-dark: ${T.accentDark};
@@ -143,7 +143,11 @@ export default function Portfolio({ subdomainSlug }) {
           --text-muted: ${T.textMuted};
           --page-bg: ${T.bg};
         }
-        *{box-sizing:border-box;margin:0;padding:0} html{scroll-behavior:smooth} body{background:${T.bg}}
+        body { background: ${T.bg}; }
+      `}}/>
+      <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:wght@300;400;500;600&family=Playfair+Display:ital@0;1&display=swap');
+        *{box-sizing:border-box;margin:0;padding:0} html{scroll-behavior:smooth}
         .nl{padding:6px 0;font-size:13px;color:#777;cursor:pointer;border:none;border-bottom:2px solid transparent;background:none;font-family:inherit;transition:all .2s;text-transform:capitalize}
         .nl:hover,.nl.on{color:#fff;border-bottom-color:#F4622A}
         .gc{background:var(--card-bg,#fff);border-radius:16px;overflow:hidden;border:1px solid var(--card-border,#E8E6E2);transition:transform .25s,box-shadow .25s;cursor:pointer;position:relative}
