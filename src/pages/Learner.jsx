@@ -229,10 +229,13 @@ export default function Learner() {
   const slug = (learner.brand||learner.name).toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'')
 
   return (
-    <div style={{ display:'grid', gridTemplateRows:'56px 1fr', gridTemplateColumns:'256px 1fr', height:'100vh', overflow:'hidden', fontFamily:"'DM Sans',sans-serif" }}>
+    <div className="layout" style={{ fontFamily:"'DM Sans',sans-serif" }}>
 
       {/* Topbar */}
-      <header style={{ gridColumn:'1/-1', display:'flex', alignItems:'center', gap:12, padding:'0 24px', background:'#0F0F0F', borderBottom:'1px solid #1E1E1E', zIndex:10 }}>
+      <header className="topbar" style={{ gridColumn:'1/-1', zIndex:10 }}>
+        <button className="hamburger" onClick={()=>setSidebarOpen(o=>!o)}>
+          <span/><span/><span/>
+        </button>
         <SIBLogo dark={true}/>
         <div style={{ marginLeft:'auto', display:'flex', gap:8, alignItems:'center' }}>
           {learner.status==='published'&&learner.slug&&(
@@ -242,8 +245,11 @@ export default function Learner() {
         </div>
       </header>
 
+      {/* Mobile sidebar overlay */}
+      <div className={`sidebar-overlay ${sidebarOpen?'open':''}`} onClick={()=>setSidebarOpen(false)}/>
+
       {/* Sidebar */}
-      <aside style={{ background:'#131313', borderRight:'1px solid #1E1E1E', overflowY:'auto', display:'flex', flexDirection:'column' }}>
+      <aside className={`sidebar learner-sidebar ${sidebarOpen?'open':''}`} style={{ background:'#131313', borderRight:'1px solid #1E1E1E', overflowY:'auto', display:'flex', flexDirection:'column' }}>
         <div style={{ padding:'16px', borderBottom:'1px solid #1E1E1E' }}>
           <div style={{ display:'flex', gap:10, alignItems:'center', marginBottom:12 }}>
             {/* Photo */}
@@ -291,7 +297,7 @@ export default function Learner() {
           ['website','My website',learner.status==='published'?'Live ✓':'Not published'],
           ['profile','My profile','Edit your details'],
           ['subscription','Subscription', hasAccess ? (activeSub?.status==='trial'?'Free trial':'Active ✓') : subStatus==='expired'?'⚠ Expired':'Not subscribed']].map(([id,label,sub])=>(
-          <div key={id} onClick={()=>setTab(id)}
+          <div key={id} onClick={()=>{ setTab(id); setSidebarOpen(false) }}
             style={{ padding:'12px 14px', cursor:'pointer', borderBottom:'1px solid #1A1A1A', borderLeft:`3px solid ${tab===id?'#F4622A':id==='subscription'&&!hasAccess?'#F4622A44':'transparent'}`, background:tab===id?'#1A1A1A':id==='subscription'&&!hasAccess?'rgba(244,98,42,.05)':'transparent', display:'flex', alignItems:'center', justifyContent:'space-between' }}>
             <div>
               <div style={{ fontSize:13, fontWeight:500, color: id==='subscription'&&!hasAccess?'#F4622A':'#ddd' }}>{label}</div>
@@ -304,7 +310,7 @@ export default function Learner() {
       </aside>
 
       {/* Main */}
-      <main style={{ overflowY:'auto', padding:24, background:'#F7F6F4' }}>
+      <main className="main learner-content" style={{ background:'#F7F6F4' }}>
         <div style={{ maxWidth:760 }}>
 
           {/* GARMENTS */}
@@ -1447,7 +1453,7 @@ function LearnerPoseSection({ garment, hasAccess, onUpdate, onUpgrade, toast }) 
           <div style={{ fontSize:12, color:'#666', background:'#F7F6F4', borderRadius:8, padding:'8px 12px', marginBottom:12, lineHeight:1.7 }}>
             ✓ Full body head-to-toe &nbsp; ✓ Plain background &nbsp; ✓ Facing forward &nbsp; ✓ Good lighting
           </div>
-          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12, marginBottom:12, filter:!hasAccess?'blur(3px)':'none', pointerEvents:!hasAccess?'none':'auto' }}>
+          <div className="tryon-cols" style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12, marginBottom:12, filter:!hasAccess?'blur(3px)':'none', pointerEvents:!hasAccess?'none':'auto' }}>
             <div>
               <div style={{ fontSize:11, color:'#aaa', marginBottom:5 }}>Your photo</div>
               <div onClick={()=>hasAccess&&tryonRef.current?.click()}

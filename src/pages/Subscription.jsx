@@ -224,7 +224,7 @@ export default function SubscriptionPage({ learner, onSubscribed }) {
         {isActive ? 'Renew or upgrade' : 'Choose your plan'}
       </div>
 
-      <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(200px,1fr))', gap:14, marginBottom:20 }}>
+      <div className="plan-grid" style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(200px,1fr))', gap:14, marginBottom:20 }}>
         {mainPlans.map(plan => {
           const meta = PLAN_META[plan.slug] || {}
           const isCurrentPlan = activeSub?.plan_id === plan.id && isActive

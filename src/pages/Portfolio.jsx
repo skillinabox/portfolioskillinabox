@@ -25,6 +25,7 @@ export default function Portfolio({ subdomainSlug }) {
   const [meas,       setMeas]       = useState({})
   const [submitting, setSubmitting] = useState(false)
   const [activeNav,  setActiveNav]  = useState('home')
+  const [mobileNav,  setMobileNav]   = useState(false)
 
   useEffect(() => {
     async function load() {
@@ -199,9 +200,32 @@ export default function Portfolio({ subdomainSlug }) {
           <div className="portfolio-nav-links" style={{ display:'flex', gap:24, alignItems:'center' }}>
             {NAV.map(n=><button key={n} className={`nl ${activeNav===n?'on':''}`} onClick={()=>scrollTo(n)}>{n.charAt(0).toUpperCase()+n.slice(1)}</button>)}
             <button onClick={()=>openEnquiry('general')} className="portfolio-nav-cta" style={{ padding:'9px 20px', fontSize:13, fontWeight:600, background:G, color:'#fff', border:'none', borderRadius:8, cursor:'pointer', fontFamily:'inherit', marginLeft:8 }}>Get in touch</button>
+            {/* Mobile hamburger */}
+            <button className="portfolio-mobile-menu-btn" onClick={()=>setMobileNav(o=>!o)}
+              style={{ display:'none', flexDirection:'column', gap:4, background:'rgba(255,255,255,.1)', border:'none', borderRadius:7, padding:'8px', cursor:'pointer', marginLeft:8 }}>
+              <span style={{ width:16, height:2, background:'#fff', borderRadius:2, display:'block' }}/>
+              <span style={{ width:16, height:2, background:'#fff', borderRadius:2, display:'block' }}/>
+              <span style={{ width:16, height:2, background:'#fff', borderRadius:2, display:'block' }}/>
+            </button>
           </div>
         </div>
       </nav>
+
+      {/* Mobile nav dropdown */}
+      {mobileNav && (
+        <div style={{ position:'fixed', top: isPreview ? 37+58 : 58, left:0, right:0, background:'rgba(10,10,10,.98)', zIndex:90, padding:'16px 24px', display:'flex', flexDirection:'column', gap:0, borderBottom:'1px solid rgba(255,255,255,.1)' }}>
+          {NAV.map(n=>(
+            <button key={n} onClick={()=>{ scrollTo(n); setMobileNav(false) }}
+              style={{ padding:'14px 0', fontSize:15, color:'#ddd', background:'none', border:'none', borderBottom:'1px solid rgba(255,255,255,.07)', cursor:'pointer', fontFamily:'inherit', textAlign:'left', textTransform:'capitalize' }}>
+              {n.charAt(0).toUpperCase()+n.slice(1)}
+            </button>
+          ))}
+          <button onClick={()=>{ openEnquiry('general'); setMobileNav(false) }}
+            style={{ marginTop:14, padding:'14px', fontSize:14, fontWeight:600, background:G, border:'none', borderRadius:10, color:'#fff', cursor:'pointer', fontFamily:'inherit' }}>
+            Get in touch →
+          </button>
+        </div>
+      )}
 
       {/* HERO */}
       <section id="home" style={{ minHeight:'100vh', background:T.heroBg, display:'flex', alignItems:'center', paddingTop: isPreview ? 95 : 58, position:'relative', overflow:'hidden' }}>

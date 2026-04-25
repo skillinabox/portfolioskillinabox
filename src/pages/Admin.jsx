@@ -456,7 +456,7 @@ export default function Admin() {
                       </button>
                     </div>
                   </div>
-                  <div style={{ display:'grid', gridTemplateColumns:garment.image_url?'160px 1fr':'1fr' }}>
+                  <div className="garment-detail-grid" style={{ display:'grid', gridTemplateColumns:garment.image_url?'160px 1fr':'1fr' }}>
                     {garment.image_url && (
                       <div style={{ padding:14, borderRight:'1px solid #F0EEE9' }}>
                         <img src={garment.image_url} alt="" style={{ width:'100%', borderRadius:8, objectFit:'cover', aspectRatio:'3/4' }}/>
@@ -1119,7 +1119,7 @@ function PoseSection({ garment, onUpdate, toast, demoMode = false }) {
         </div>
 
         {/* 8-pose grid */}
-        <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:8 }}>
+        <div className="pose-grid-8" style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:8 }}>
           {POSE_LABELS.map(p => {
             const isPending = p.key in pendingPoses
             const isDone    = !!poses[p.key]
@@ -1175,7 +1175,7 @@ function PoseSection({ garment, onUpdate, toast, demoMode = false }) {
             <div>✓ Full body head-to-toe shot &nbsp; ✓ Plain background &nbsp; ✓ Facing forward</div>
             <div>✓ Good even lighting &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; ✗ Avoid busy patterned clothing</div>
           </div>
-          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12, marginBottom:14 }}>
+          <div className="tryon-cols" style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12, marginBottom:14 }}>
             <div>
               <div style={{ fontSize:11, color:'#aaa', marginBottom:6 }}>Person photo</div>
               <div onClick={()=>tryonRef.current?.click()}
