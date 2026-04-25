@@ -122,10 +122,11 @@ export default function Portfolio({ subdomainSlug }) {
 
   const skills    = learner.skills    ? learner.skills.split(',').map(s=>s.trim()).filter(Boolean) : []
   const expertise = learner.expertise ? learner.expertise.split(',').map(s=>s.trim()).filter(Boolean) : []
-  // Apply theme from learner settings
-  const theme = THEMES[learner.theme || DEFAULT_THEME] || THEMES[DEFAULT_THEME]
-  const T = theme.colors  // T.accent, T.bg, T.heroBg etc.
-  const G = T.accent      // keep G for backward compat
+  // Apply theme from learner settings — with fallback
+  const themeKey = (learner.theme && THEMES[learner.theme]) ? learner.theme : DEFAULT_THEME
+  const theme = THEMES[themeKey]
+  const T = theme.colors
+  const G = T.accent
 
   const NAV = ['home','collection','about','expertise','reviews','contact']
 

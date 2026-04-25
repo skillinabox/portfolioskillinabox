@@ -143,13 +143,13 @@ function AutoRedirect() {
 // Detect if running on a student subdomain e.g. arzu.houseofentreprenaari.com
 function getSubdomainSlug() {
   const host = window.location.hostname
-  const knownHosts = ['portfolioskillinabox.vercel.app', 'portfolio.skillinabox.in', 'localhost', '127.0.0.1']
-  if (knownHosts.some(h => host === h || host.endsWith('.vercel.app'))) return null
-  // Check for *.houseofentreprenaari.com or any custom wildcard
-  const parts = host.split('.')
-  if (parts.length >= 3) {
-    // subdomain.domain.tld — return the subdomain as slug
-    return parts[0]
+  // Never treat these as student subdomains
+  if (host === 'localhost' || host === '127.0.0.1') return null
+  if (host.includes('vercel.app')) return null
+  if (host.includes('skillinabox.in')) return null
+  // Only treat as subdomain if it's *.houseofentreprenaari.com
+  if (host.endsWith('.houseofentreprenaari.com')) {
+    return host.replace('.houseofentreprenaari.com', '')
   }
   return null
 }
