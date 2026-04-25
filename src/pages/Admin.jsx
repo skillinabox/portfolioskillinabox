@@ -36,8 +36,10 @@ export default function Admin() {
   const [loadingL,     setLoadingL]     = useState(true)
   const [loadingG,     setLoadingG]     = useState(false)
   const [search,       setSearch]       = useState('')
-  const [filterStatus, setFilterStatus] = useState('all') // all | published | in-progress | new | demo
-  const [sortBy,       setSortBy]       = useState('name') // name | recent | status
+  const [filterStatus, setFilterStatus] = useState('all')
+  const [sortBy,       setSortBy]       = useState('name')
+  const [page,         setPage]         = useState(0)
+  const PAGE_SIZE = 20
   const [tab,          setTab]          = useState(() => localStorage.getItem('snb_tab') || 'garments')
   const [publishing,   setPublishing]   = useState(false)
   const [showAdd,      setShowAdd]      = useState(false)
@@ -222,6 +224,12 @@ export default function Admin() {
       return 0
     })
 
+  const totalPages = Math.ceil(filtered.length / PAGE_SIZE)
+  const paginated  = filtered.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE)
+
+  // Reset to page 0 when filters change
+  function setFilter(fn) { fn(); setPage(0) }
+
   const garmentsByCol = collections.reduce((acc, c) => {
     acc[c.id] = garments.filter(g => g.collection_id === c.id)
     return acc
@@ -267,13 +275,13 @@ export default function Admin() {
       <aside className={`sidebar ${sidebarOpen?'open':''}`}>
         <div style={{ padding:'10px 12px 8px', borderBottom:'1px solid #1E1E1E' }}>
           <div style={{ display:'flex', gap:8, marginBottom:8 }}>
-            <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Name, brand, city, email, phone…"
+            <input value={search} onChange={e=>{ setSearch(e.target.value); setPage(0) }} placeholder="Name, brand, city, email, phone…"
               style={{ flex:1, fontSize:12, padding:'7px 10px', border:'1px solid #2A2A2A', borderRadius:8, background:'#1A1A1A', color:'#fff', outline:'none', fontFamily:'inherit' }}/>
             <button style={{ ...btn('primary'), padding:'7px 12px', fontSize:12, flexShrink:0 }} onClick={()=>setShowAdd(true)}>+ Add</button>
           </div>
           <div style={{ display:'flex', gap:4, flexWrap:'wrap', marginBottom:6 }}>
             {[['all','All',learners.length],['published','Live',counts.published],['in-progress','Active',counts['in-progress']],['new','New',counts.new],['demo','Demo',learners.filter(l=>l.is_demo).length]].map(([val,label,count])=>(
-              <button key={val} onClick={()=>setFilterStatus(val)}
+              <button key={val} onClick={()=>{ setFilterStatus(val); setPage(0) }}
                 style={{ fontSize:10, padding:'3px 8px', borderRadius:99, border:'none', cursor:'pointer', fontFamily:'inherit', fontWeight:filterStatus===val?600:400,
                   background: filterStatus===val ? '#F4622A' : '#2A2A2A',
                   color: filterStatus===val ? '#fff' : '#666' }}>
@@ -283,7 +291,7 @@ export default function Admin() {
           </div>
           <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
             <div style={{ fontSize:11, color:'#444' }}>{filtered.length} learner{filtered.length!==1?'s':''}</div>
-            <select value={sortBy} onChange={e=>setSortBy(e.target.value)}
+            <select value={sortBy} onChange={e=>{ setSortBy(e.target.value); setPage(0) }}
               style={{ fontSize:10, padding:'2px 6px', border:'1px solid #2A2A2A', borderRadius:6, background:'#1A1A1A', color:'#666', outline:'none', fontFamily:'inherit', cursor:'pointer' }}>
               <option value="name">A → Z</option>
               <option value="recent">Newest first</option>
@@ -299,7 +307,7 @@ export default function Admin() {
               <div style={{ fontSize:12, color:'#555' }}>No learners match</div>
               {(search||filterStatus!=='all') && <button onClick={()=>{setSearch('');setFilterStatus('all')}} style={{ marginTop:8, fontSize:11, color:'#F4622A', background:'none', border:'none', cursor:'pointer', fontFamily:'inherit' }}>Clear filters</button>}
             </div>
-          ) : filtered.map(l=>(
+          ) : paginated.map(l=>(
             <div key={l.id} onClick={()=>{ setSelLid(l.id); setSelGid(null); setGarments([]); setCollections([]); setTab('garments'); setSidebarOpen(false) }}
               style={{ padding:'10px 14px', cursor:'pointer', borderBottom:'1px solid #1A1A1A', borderLeft:`3px solid ${selLid===l.id?'#F4622A':'transparent'}`, background:selLid===l.id?'#1A1A1A':'transparent' }}>
               <div style={{ display:'flex', alignItems:'center', gap:9 }}>
@@ -324,6 +332,24 @@ export default function Admin() {
               </div>
             </div>
           ))}
+
+        {/* Pagination */}
+        {totalPages > 1 && (
+          <div style={{ padding:'10px 12px', borderTop:'1px solid #1E1E1E', display:'flex', alignItems:'center', justifyContent:'space-between', flexShrink:0, background:'#131313' }}>
+            <button onClick={()=>setPage(p=>Math.max(0,p-1))} disabled={page===0}
+              style={{ fontSize:12, padding:'5px 10px', background:page===0?'#1A1A1A':'#2A2A2A', border:'1px solid #2A2A2A', borderRadius:6, color:page===0?'#444':'#aaa', cursor:page===0?'default':'pointer', fontFamily:'inherit' }}>
+              ← Prev
+            </button>
+            <div style={{ fontSize:11, color:'#555', textAlign:'center' }}>
+              <div style={{ color:'#888' }}>{page+1} / {totalPages}</div>
+              <div style={{ fontSize:10, color:'#444' }}>{filtered.length} total</div>
+            </div>
+            <button onClick={()=>setPage(p=>Math.min(totalPages-1,p+1))} disabled={page>=totalPages-1}
+              style={{ fontSize:12, padding:'5px 10px', background:page>=totalPages-1?'#1A1A1A':'#2A2A2A', border:'1px solid #2A2A2A', borderRadius:6, color:page>=totalPages-1?'#444':'#aaa', cursor:page>=totalPages-1?'default':'pointer', fontFamily:'inherit' }}>
+              Next →
+            </button>
+          </div>
+        )}
       </aside>
 
       {/* Main */}
