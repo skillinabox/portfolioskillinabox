@@ -172,32 +172,28 @@ div:hover > .garment-delete-btn { opacity: 1; }
   /* ── Profile meta grid ── */
   .profile-meta-grid { grid-template-columns: 1fr !important; }
 
-  /* ── Learner layout ── */
-  .learner-outer { flex-direction: column !important; }
-  .learner-sidebar {
-    width: 100% !important;
-    flex-direction: row !important;
-    overflow-x: auto;
-    border-right: none !important;
-    border-bottom: 1px solid #E8E6E2;
-    padding: 8px 12px !important;
-    gap: 6px !important;
+  /* ── Learner sidebar — proper vertical drawer on mobile ── */
+  .sidebar.learner-sidebar {
+    /* inherits .sidebar fixed/transform drawer behaviour */
+    width: 86vw !important;
+    max-width: 320px !important;
+    flex-direction: column !important;
+    overflow-x: hidden !important;
+    overflow-y: auto !important;
+    border-right: 1px solid #1E1E1E !important;
+    border-bottom: none !important;
+    padding: 0 !important;
+    gap: 0 !important;
   }
-  .learner-tab-item {
-    flex-direction: row !important;
-    min-width: fit-content !important;
-    padding: 8px 14px !important;
-    border-left: none !important;
-    border-bottom: 2px solid transparent;
-    white-space: nowrap;
-  }
-  .learner-tab-item.active {
-    border-bottom-color: #F4622A !important;
-    border-left-color: transparent !important;
-    background: #FEF0EA !important;
-  }
-  .learner-tab-sub { display: none !important; }
   .learner-content { padding: 14px !important; }
+
+  /* ── Topbar mobile ── */
+  .topbar-portfolio-label { display: none; }
+  .topbar-portfolio-link { padding: 6px 10px !important; }
+
+  /* ── Enquiry mobile: list/detail switching ── */
+  .enquiry-list.has-selection { display: none; }
+  .enquiry-detail-back { display: block !important; }
 
   /* ── Portfolio ── */
   .portfolio-nav-links { display: none; }

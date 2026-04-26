@@ -240,7 +240,7 @@ export default function Learner() {
         <SIBLogo dark={true}/>
         <div style={{ marginLeft:'auto', display:'flex', gap:8, alignItems:'center' }}>
           {learner.status==='published'&&learner.slug&&(
-            <a href={getPortfolioUrl(learner.slug)} target="_blank" rel="noreferrer" style={{ ...btn(), textDecoration:'none', background:'#E6F4EC', borderColor:'#52B27A', color:'#0D6B3A', fontSize:12 }}>↗ View my portfolio</a>
+            <a href={getPortfolioUrl(learner.slug)} target="_blank" rel="noreferrer" className="topbar-portfolio-link" style={{ ...btn(), textDecoration:'none', background:'#E6F4EC', borderColor:'#52B27A', color:'#0D6B3A', fontSize:12 }}>↗ <span className="topbar-portfolio-label">View my portfolio</span></a>
           )}
           <button style={{ ...btn('ghost'), color:'#888' }} onClick={signOut}>Sign out</button>
         </div>
@@ -411,9 +411,9 @@ export default function Learner() {
                       </div>
                     </div>
 
-                    <div style={{ display:'grid', gridTemplateColumns:garment.image_url?'180px 1fr':'1fr' }}>
+                    <div className="garment-detail-grid" style={{ display:'grid', gridTemplateColumns:garment.image_url?'180px 1fr':'1fr' }}>
                       {garment.image_url && (
-                        <div style={{ padding:14, borderRight:'1px solid #F0EEE9' }}>
+                        <div className="garment-image-col" style={{ padding:14, borderRight:'1px solid #F0EEE9' }}>
                           <img src={garment.image_url} alt="" style={{ width:'100%', borderRadius:8, objectFit:'cover', aspectRatio:'3/4', display:'block' }}/>
                         </div>
                       )}
@@ -575,8 +575,8 @@ export default function Learner() {
             <div style={card}>
               <div style={chead}><div style={{ fontSize:13, fontWeight:600 }}>Enquiries & orders</div><span style={{ fontSize:12, color:'#888' }}>{enquiries.length} total · {unread} unread</span></div>
               {enquiries.length===0 ? <Empty icon="✉" title="No enquiries yet" message="Share your portfolio link to start receiving enquiries."/> : (
-                <div style={{ display:'grid', gridTemplateColumns:selEnqId?'1fr 300px':'1fr' }}>
-                  <div style={{ borderRight:selEnqId?'1px solid #F0EEE9':'none' }}>
+                <div className="enquiry-split" style={{ display:'grid', gridTemplateColumns:selEnqId?'1fr 300px':'1fr' }}>
+                  <div className={`enquiry-list ${selEnqId?'has-selection':''}`} style={{ borderRight:selEnqId?'1px solid #F0EEE9':'none' }}>
                     {enquiries.map(e=>(
                       <div key={e.id} onClick={()=>{ setSelEnqId(selEnqId===e.id?null:e.id); markRead(e.id) }}
                         style={{ padding:'13px 18px', borderBottom:'1px solid #F5F3F0', display:'flex', gap:12, cursor:'pointer', background:selEnqId===e.id?'#FEF8F6':e.read?'transparent':'#FFFAF8' }}>
@@ -596,7 +596,8 @@ export default function Learner() {
                     ))}
                   </div>
                   {selEnquiry&&(
-                    <div style={{ padding:20, background:'#FDFCFC' }}>
+                    <div className={`enquiry-detail ${selEnquiry?'show':''}`} style={{ padding:20, background:'#FDFCFC' }}>
+                      <button onClick={()=>setSelEnqId(null)} className="enquiry-detail-back" style={{ display:'none', background:'none', border:'none', fontSize:13, color:'#666', cursor:'pointer', padding:'0 0 12px', fontFamily:'inherit' }}>← Back to list</button>
                       <div style={{ fontSize:14, fontWeight:600, marginBottom:4 }}>{selEnquiry.from_name}</div>
                       {selEnquiry.from_email&&<div style={{ fontSize:12, color:'#888', marginBottom:2 }}>{selEnquiry.from_email}</div>}
                       {selEnquiry.from_phone&&<div style={{ fontSize:12, color:'#888', marginBottom:12 }}>{selEnquiry.from_phone}</div>}
@@ -1411,7 +1412,7 @@ function LearnerPoseSection({ garment, hasAccess, onUpdate, onUpgrade, toast }) 
           )}
         </div>
 
-        <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:8, filter:!hasAccess?'blur(3px)':'none', pointerEvents:!hasAccess?'none':'auto' }}>
+        <div className="pose-grid-8" style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:8, filter:!hasAccess?'blur(3px)':'none', pointerEvents:!hasAccess?'none':'auto' }}>
           {LEARNER_POSE_LABELS.map(p => {
             const isDone    = !!poses[p.key]
             const isPending = p.key in pendingPoses
