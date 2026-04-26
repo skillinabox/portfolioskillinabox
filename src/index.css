@@ -218,21 +218,38 @@ div:hover > .garment-delete-btn { opacity: 1; }
 }
 
 /* ── Login page mobile ── */
-@media (max-width: 768px) {
-  /* Stack brand panel above form on mobile */
-  .login-brand-panel {
+@media (max-width: 480px) {
+  .login-topbar {
+    padding: 16px 18px !important;
+  }
+  .login-tag {
     display: none !important;
   }
-  .login-form-panel {
-    padding: 40px 24px !important;
-    min-height: 100vh;
+  .login-heading {
+    font-size: 32px !important;
+  }
+  .login-heading-sm {
+    font-size: 28px !important;
+  }
+  .login-stats-strip {
+    gap: 20px !important;
+    margin-top: 28px !important;
   }
 }
 
-@media (max-width: 480px) {
-  .login-form-panel {
-    padding: 32px 20px !important;
-    align-items: flex-start !important;
-    padding-top: 48px !important;
+/* Tap feedback for role-selector cards (hover events don't fire on touch) */
+@media (hover: none) {
+  .login-role-card:active {
+    background: rgba(255,255,255,.12) !important;
+    border-color: rgba(244,98,42,.4) !important;
+    transform: scale(.98) !important;
+  }
+}
+
+/* Safe-area handling for notched phones (iPhone X+) */
+@supports (padding: max(0px)) {
+  .login-page {
+    padding-top: max(0px, env(safe-area-inset-top));
+    padding-bottom: max(0px, env(safe-area-inset-bottom));
   }
 }

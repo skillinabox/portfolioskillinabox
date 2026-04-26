@@ -51,14 +51,14 @@ export default function Login() {
   }
 
   const inp = {
-    width:'100%', padding:'13px 16px', fontSize:15, border:'1px solid rgba(255,255,255,.15)',
+    width:'100%', padding:'14px 16px', fontSize:16, border:'1px solid rgba(255,255,255,.15)',
     borderRadius:12, background:'rgba(255,255,255,.08)', color:'#fff', outline:'none',
     marginBottom:14, transition:'border-color .15s, background .15s', fontFamily:'inherit',
     WebkitAppearance:'none',
   }
 
   return (
-    <div style={{ minHeight:'100vh', background:'#0D0D0D', display:'flex', flexDirection:'column', fontFamily:"'DM Sans',sans-serif", position:'relative', overflow:'hidden' }}>
+    <div className="login-page" style={{ minHeight:'100dvh', background:'#0D0D0D', display:'flex', flexDirection:'column', fontFamily:"'DM Sans',sans-serif", position:'relative', overflow:'hidden' }}>
 
       {/* Background design */}
       <div style={{ position:'absolute', inset:0, backgroundImage:'linear-gradient(rgba(244,98,42,.06) 1px,transparent 1px),linear-gradient(90deg,rgba(244,98,42,.06) 1px,transparent 1px)', backgroundSize:'44px 44px', pointerEvents:'none' }}/>
@@ -66,9 +66,9 @@ export default function Login() {
       <div style={{ position:'absolute', bottom:'-5%', left:'-5%', width:'40vw', height:'40vw', maxWidth:360, maxHeight:360, borderRadius:'50%', background:'radial-gradient(circle,rgba(90,50,200,.08) 0%,transparent 65%)', pointerEvents:'none' }}/>
 
       {/* Top bar */}
-      <div style={{ position:'relative', padding:'20px 28px', display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+      <div className="login-topbar" style={{ position:'relative', padding:'20px 28px', display:'flex', alignItems:'center', justifyContent:'space-between' }}>
         <SIBLogo dark={true}/>
-        <div style={{ fontSize:11, color:'#444', letterSpacing:'.1em', textTransform:'uppercase' }}>Portfolio Platform</div>
+        <div className="login-tag" style={{ fontSize:11, color:'#444', letterSpacing:'.1em', textTransform:'uppercase' }}>Portfolio Platform</div>
       </div>
 
       {/* Main content */}
@@ -78,7 +78,7 @@ export default function Login() {
           // ── Role selector ──
           <div style={{ width:'100%', maxWidth:400, animation:'fadeUp .4s ease both' }}>
             <div style={{ textAlign:'center', marginBottom:36 }}>
-              <h1 style={{ fontFamily:"'DM Serif Display',serif", fontSize:38, color:'#fff', lineHeight:1.15, marginBottom:10 }}>
+              <h1 className="login-heading" style={{ fontFamily:"'DM Serif Display',serif", fontSize:38, color:'#fff', lineHeight:1.15, marginBottom:10 }}>
                 Welcome back
               </h1>
               <p style={{ fontSize:14, color:'#666', lineHeight:1.7 }}>Sign in to your portfolio platform</p>
@@ -89,7 +89,7 @@ export default function Login() {
                 ['admin',   '⚙',  'Team & admin login',   'Manage learners, upload garments, publish portfolios', '#F4622A'],
                 ['learner', '👗', 'Learner login',         'View garments, set pricing, publish your portfolio',    '#A78BFA'],
               ].map(([r, icon, title, sub, accent]) => (
-                <button key={r} onClick={()=>setMode(r)}
+                <button key={r} onClick={()=>setMode(r)} className="login-role-card"
                   style={{ padding:'20px 22px', background:'rgba(255,255,255,.05)', border:'1px solid rgba(255,255,255,.1)', borderRadius:16, cursor:'pointer', textAlign:'left', transition:'all .2s', fontFamily:'inherit', backdropFilter:'blur(8px)' }}
                   onMouseOver={e=>{ e.currentTarget.style.background='rgba(255,255,255,.1)'; e.currentTarget.style.borderColor=accent+'66'; e.currentTarget.style.transform='translateY(-2px)' }}
                   onMouseOut={e=>{ e.currentTarget.style.background='rgba(255,255,255,.05)'; e.currentTarget.style.borderColor='rgba(255,255,255,.1)'; e.currentTarget.style.transform='' }}>
@@ -108,7 +108,7 @@ export default function Login() {
             </div>
 
             {/* Stats strip */}
-            <div style={{ marginTop:40, display:'flex', justifyContent:'center', gap:32 }}>
+            <div className="login-stats-strip" style={{ marginTop:40, display:'flex', justifyContent:'center', gap:32 }}>
               {[['428+','Portfolios'],['3,400+','Garments'],['100%','Made with ♥']].map(([n,l])=>(
                 <div key={l} style={{ textAlign:'center' }}>
                   <div style={{ fontSize:18, fontWeight:700, color:'#fff' }}>{n}</div>
@@ -130,7 +130,7 @@ export default function Login() {
               <div style={{ fontSize:11, fontWeight:600, color:'#F4622A', letterSpacing:'.1em', textTransform:'uppercase', marginBottom:8 }}>
                 {mode === 'admin' ? '⚙ Team & Admin' : '👗 Learner'}
               </div>
-              <h2 style={{ fontFamily:"'DM Serif Display',serif", fontSize:32, color:'#fff', fontWeight:400, marginBottom:6 }}>
+              <h2 className="login-heading-sm" style={{ fontFamily:"'DM Serif Display',serif", fontSize:32, color:'#fff', fontWeight:400, marginBottom:6 }}>
                 {signup ? 'Create account' : 'Sign in'}
               </h2>
               <p style={{ fontSize:13, color:'#555' }}>
