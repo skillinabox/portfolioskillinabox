@@ -36,6 +36,7 @@ export default function Learner() {
   const [activeSub,    setActiveSub]    = useState(null)
   const [usage,        setUsage]        = useState({ garments_used:0, poses_used:0 })
   const [showUpgrade,  setShowUpgrade]  = useState(null) // { feature, used, limit }
+  const [sidebarOpen,  setSidebarOpen]  = useState(false)
 
   const fileRef  = useRef()
   const photoRef = useRef()
