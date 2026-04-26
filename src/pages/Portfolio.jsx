@@ -158,10 +158,15 @@ export default function Portfolio({ subdomainSlug }) {
         .go{position:absolute;bottom:16px;left:16px;right:16px;background:#F4622A;color:#fff;padding:10px;border-radius:8px;font-size:13px;font-weight:600;text-align:center;opacity:0;transform:translateY(8px);transition:all .25s}
         .ec{background:var(--card-bg,#fff);border:1px solid var(--card-border,#E8E6E2);border-radius:14px;padding:28px 24px;transition:all .25s}
         .ec:hover{border-color:#F4622A;transform:translateY(-2px)}
-        .inf{width:100%;padding:11px 14px;font-size:14px;border:1px solid #E2E0DC;border-radius:10px;outline:none;transition:border-color .15s;font-family:inherit}
+        .inf{width:100%;padding:12px 14px;font-size:15px;border:1px solid #E2E0DC;border-radius:10px;outline:none;transition:border-color .15s;font-family:inherit}
         .inf:focus{border-color:#F4622A}
         @keyframes fadeUp{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
         .fu{animation:fadeUp .6s ease both}
+        @media (max-width: 768px) {
+          .pf-section { padding: 56px 18px !important; }
+          .lb-stage { padding: 48px 16px !important; }
+          .inf { font-size: 16px !important; padding: 13px 14px !important; }
+        }
       `}</style>
 
       {/* PREVIEW BANNER */}
@@ -267,7 +272,7 @@ export default function Portfolio({ subdomainSlug }) {
       </section>
 
       {/* COLLECTION */}
-      <section id="collection" style={{ padding:'96px 24px', background:T.bg }}>
+      <section id="collection" className="pf-section" style={{ padding:'96px 24px', background:T.bg }}>
         <div style={{ maxWidth:1100, margin:'0 auto' }}>
           <div style={{ display:'flex', alignItems:'flex-end', justifyContent:'space-between', marginBottom:56, flexWrap:'wrap', gap:16 }}>
             <div>
@@ -346,7 +351,7 @@ export default function Portfolio({ subdomainSlug }) {
       </section>
 
       {/* ABOUT */}
-      <section id="about" style={{ padding:'96px 24px', background:T.heroBg, position:'relative', overflow:'hidden' }}>
+      <section id="about" className="pf-section" style={{ padding:'96px 24px', background:T.heroBg, position:'relative', overflow:'hidden' }}>
         <div style={{ position:'absolute', inset:0, backgroundImage:`linear-gradient(rgba(244,98,42,.04) 1px,transparent 1px),linear-gradient(90deg,rgba(244,98,42,.04) 1px,transparent 1px)`, backgroundSize:'48px 48px' }}/>
         <div style={{ maxWidth:1100, margin:'0 auto', position:'relative' }}>
           <div className="about-grid" style={{ display:'grid', gridTemplateColumns:'5fr 6fr', gap:80, alignItems:'center' }}>
@@ -389,7 +394,7 @@ export default function Portfolio({ subdomainSlug }) {
       </section>
 
       {/* EXPERTISE */}
-      <section id="expertise" style={{ padding:'96px 24px', background:T.bg }}>
+      <section id="expertise" className="pf-section" style={{ padding:'96px 24px', background:T.bg }}>
         <div style={{ maxWidth:1100, margin:'0 auto' }}>
           <div style={{ textAlign:'center', marginBottom:60 }}>
             <div style={{ fontSize:11, fontWeight:600, color:G, letterSpacing:'.12em', textTransform:'uppercase', marginBottom:12 }}>Skills & expertise</div>
@@ -436,7 +441,7 @@ export default function Portfolio({ subdomainSlug }) {
 
       {/* CERTIFICATES */}
       {certs.length > 0 && (
-        <section style={{ padding:'72px 24px', background:'#F7F6F4' }}>
+        <section className="pf-section" style={{ padding:'72px 24px', background:'#F7F6F4' }}>
           <div style={{ maxWidth:1100, margin:'0 auto' }}>
             <div style={{ textAlign:'center', marginBottom:48 }}>
               <div style={{ fontSize:11, fontWeight:600, color:G, letterSpacing:'.12em', textTransform:'uppercase', marginBottom:12 }}>Qualifications</div>
@@ -471,7 +476,7 @@ export default function Portfolio({ subdomainSlug }) {
       )}
 
       {/* REVIEWS */}
-      <section id="reviews" style={{ padding:'96px 24px', background:T.heroBg }}>
+      <section id="reviews" className="pf-section" style={{ padding:'96px 24px', background:T.heroBg }}>
         <div style={{ maxWidth:1100, margin:'0 auto' }}>
           <div style={{ textAlign:'center', marginBottom:56 }}>
             <div style={{ fontSize:11, fontWeight:600, color:G, letterSpacing:'.12em', textTransform:'uppercase', marginBottom:12 }}>What customers say</div>
@@ -501,7 +506,7 @@ export default function Portfolio({ subdomainSlug }) {
       </section>
 
       {/* CONTACT */}
-      <section id="contact" style={{ padding:'96px 24px', background:T.heroBg }}>
+      <section id="contact" className="pf-section" style={{ padding:'96px 24px', background:T.heroBg }}>
         <div style={{ maxWidth:760, margin:'0 auto', textAlign:'center' }}>
           <div style={{ fontSize:11, fontWeight:600, color:G, letterSpacing:'.12em', textTransform:'uppercase', marginBottom:16 }}>Let's work together</div>
           <h2 style={{ fontFamily:"'DM Serif Display',serif", fontSize:52, color:'#fff', lineHeight:1.15, marginBottom:16 }}>Interested in a piece?</h2>
@@ -543,7 +548,14 @@ export default function Portfolio({ subdomainSlug }) {
           </div>
 
           {/* Main image */}
-          <div style={{ flex:1, display:'flex', alignItems:'center', justifyContent:'center', width:'100%', padding:'60px 80px', minHeight:0 }}>
+          <div className="lb-stage" style={{ flex:1, display:'flex', alignItems:'center', justifyContent:'center', width:'100%', padding:'60px 80px', minHeight:0 }}
+            onTouchStart={e=>{ window.__lbTouchX = e.touches[0].clientX }}
+            onTouchEnd={e=>{
+              const dx = e.changedTouches[0].clientX - (window.__lbTouchX||0)
+              if (Math.abs(dx) < 40 || lightbox.images.length<=1) return
+              if (dx < 0) setLightbox(p=>({...p, index:(p.index+1)%p.images.length}))
+              else        setLightbox(p=>({...p, index:(p.index-1+p.images.length)%p.images.length}))
+            }}>
             <img key={lightbox.index} src={lightbox.images[lightbox.index]} alt="" className="lb-img"
               style={{ maxHeight:'100%', maxWidth:'100%', objectFit:'contain', borderRadius:12, boxShadow:'0 24px 80px rgba(0,0,0,.8)' }}/>
           </div>
