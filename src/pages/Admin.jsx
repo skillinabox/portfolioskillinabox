@@ -1,6 +1,8 @@
 import { useState, useEffect, useRef } from 'react'
 import { supabase, uploadGarmentImage, uploadProfileImage, tagGarment, generateCollectionDesc, generateGarmentDesc, makeSlug, fileToBase64 } from '../lib/supabase'
 import { grantFreeTrial, getPlans, getActiveSubscription, getUsage, currentMonth } from '../lib/subscription'
+import { THEMES, DEFAULT_THEME } from '../lib/themes'
+import Analytics from './Analytics'
 import { useAuth } from '../App'
 import { SIBLogo, Avatar, StatusBadge, GarmentThumb, Modal, Empty, Spinner, useToast } from '../components/ui'
 
@@ -46,6 +48,7 @@ export default function Admin() {
   const [showAddCol,   setShowAddCol]   = useState(false)
   const [showPubConf,  setShowPubConf]  = useState(false)
   const [showPlans,    setShowPlans]    = useState(false)
+  const [showAnalytics,setShowAnalytics]= useState(false)
   const [genningDesc,  setGenningDesc]  = useState(false)
 
   const fileRef  = useRef()
@@ -266,6 +269,7 @@ export default function Admin() {
         </div>
         <div style={{ marginLeft:'auto', display:'flex', gap:8 }}>
           {learner?.slug && <a href={getPortfolioUrl(learner.slug)} target="_blank" rel="noreferrer" style={{ ...btn('ghost'), color:'#888', textDecoration:'none', fontSize:12 }}>View site ↗</a>}
+          <button style={{ ...btn(), fontSize:12 }} onClick={()=>setShowAnalytics(true)}>📊 Analytics</button>
           <button style={{ ...btn(), fontSize:12 }} onClick={()=>setShowPlans(true)}>⚙ Plans & offers</button>
           <button style={btn('ghost')} onClick={signOut}>Sign out</button>
         </div>
@@ -693,6 +697,7 @@ export default function Admin() {
                 <div style={{ padding:'0 18px 16px', fontSize:11, color:'#aaa' }}>
                   Learner sign-up link: <strong>{window.location.origin}/login</strong>
                 </div>
+                <AdminThemePicker learner={learner} onUpdate={updateLearner} toast={toast}/>
                 <CertificateManager learner={learner} toast={toast}/>
                 <PasswordManager learner={learner} toast={toast}/>
                 <DeleteLearner learner={learner} toast={toast} onDeleted={()=>{ setSelLid(null); loadLearners() }} onToggleDemo={()=>updateLearner({ is_demo: !learner.is_demo })}/>
@@ -709,6 +714,7 @@ export default function Admin() {
       {showAdd&&<AddLearnerModal onAdd={addLearner} onClose={()=>setShowAdd(false)}/>}
       {showAddCol&&<AddCollectionModal onAdd={addCollection} onClose={()=>setShowAddCol(false)}/>}
       {showPlans&&<PlansModal onClose={()=>setShowPlans(false)} toast={toast}/>}
+      {showAnalytics&&<Analytics onClose={()=>setShowAnalytics(false)}/>}
       {showPubConf&&(
         <Modal title="Publish portfolio" onClose={()=>setShowPubConf(false)} width={400}>
           <p style={{ fontSize:14, color:'#666', lineHeight:1.6, marginBottom:20 }}>Publish all tagged garments for <strong>{learner?.name}</strong>?</p>
@@ -1372,6 +1378,35 @@ function AdminOwnPhotoUploader({ garment, onUpdate, toast }) {
       {ownPhotos.length === 0 && !uploading && (
         <div style={{ fontSize:12, color:'#ccc', fontStyle:'italic', textAlign:'center', marginTop:4 }}>No photos uploaded yet</div>
       )}
+    </div>
+  )
+}
+
+// ── Admin Theme Picker ────────────────────────────────────────
+function AdminThemePicker({ learner, onUpdate, toast }) {
+  const current = learner.theme || DEFAULT_THEME
+  return (
+    <div style={{ margin:'0 18px 14px', padding:'14px 16px', background:'#F7F6F4', borderRadius:10 }}>
+      <div style={{ fontSize:12, fontWeight:600, color:'#111', marginBottom:10 }}>Portfolio theme</div>
+      <div style={{ display:'grid', gridTemplateColumns:'repeat(5,1fr)', gap:8 }}>
+        {Object.entries(THEMES).map(([key, theme]) => {
+          const isActive = current === key
+          return (
+            <div key={key} onClick={()=>{ onUpdate({ theme: key }); toast(`Theme → ${theme.name} ✓`, 'success') }}
+              style={{ borderRadius:8, overflow:'hidden', border:`2px solid ${isActive?'#F4622A':'#E8E6E2'}`, cursor:'pointer', transition:'all .15s' }}>
+              <div style={{ height:36, background:theme.preview.bg, display:'flex' }}>
+                <div style={{ width:'40%', background:theme.preview.dark }}/>
+                <div style={{ flex:1, display:'flex', alignItems:'center', justifyContent:'center' }}>
+                  <div style={{ width:12, height:3, borderRadius:2, background:theme.preview.accent }}/>
+                </div>
+              </div>
+              <div style={{ padding:'4px 6px', background:'#fff' }}>
+                <div style={{ fontSize:9, fontWeight:isActive?700:500, color:isActive?'#F4622A':'#555', overflow:'hidden', whiteSpace:'nowrap', textOverflow:'ellipsis' }}>{theme.name}</div>
+              </div>
+            </div>
+          )
+        })}
+      </div>
     </div>
   )
 }
