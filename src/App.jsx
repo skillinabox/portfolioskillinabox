@@ -60,21 +60,27 @@ function AuthProvider({ children }) {
   async function loadProfile(userId) {
     setLoading(true)
     try {
-      // Try to get profile
-      let { data: prof, error } = await supabase
+      let { data: prof } = await supabase
         .from('profiles')
         .select('*')
         .eq('id', userId)
-        .single()
+        .maybeSingle()
 
-      // If no profile exists, create one (handles case where trigger didn't fire)
-      if (error || !prof) {
+      // Profile doesn't exist — create it
+      if (!prof) {
         const { data: newProf } = await supabase
           .from('profiles')
           .insert({ id: userId, role: 'learner' })
           .select()
           .single()
         prof = newProf
+      }
+
+      if (!prof) {
+        // Still no profile — sign out to avoid infinite loop
+        await supabase.auth.signOut()
+        setLoading(false)
+        return
       }
 
       setProfile(prof)
@@ -91,8 +97,6 @@ function AuthProvider({ children }) {
       }
     } catch (err) {
       console.error('loadProfile error:', err)
-      // Set a fallback profile so we don't loop forever
-      setProfile({ id: userId, role: 'learner' })
     } finally {
       setLoading(false)
     }
@@ -119,6 +123,8 @@ function Protected({ role, children }) {
   const { user, profile, loading } = useAuth()
   if (loading) return <LoadingScreen />
   if (!user) return <Navigate to="/login" replace />
+  // If profile hasn't loaded yet, show loading
+  if (!profile) return <LoadingScreen />
   if (role && profile?.role !== role) {
     return <Navigate to={profile?.role === 'admin' ? '/admin' : '/dashboard'} replace />
   }
