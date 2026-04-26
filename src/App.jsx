@@ -79,12 +79,13 @@ function AuthProvider({ children }) {
 
       setProfile(prof)
 
-      // If learner, fetch their record
+      // If learner, fetch their record by email
       if (prof?.role === 'learner') {
+        const { data: { user } } = await supabase.auth.getUser()
         const { data: lrn } = await supabase
           .from('learners')
           .select('*')
-          .eq('profile_id', userId)
+          .eq('email', user.email)
           .maybeSingle()
         setLearner(lrn || null)
       }
