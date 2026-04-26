@@ -2,7 +2,7 @@
 // Strategy: network-first for navigation (so users always get fresh React bundle),
 // cache-first for hashed static assets, never cache API/Supabase calls.
 
-const CACHE_VERSION = 'sib-portfolio-v1'
+const CACHE_VERSION = 'sib-portfolio-v2'
 const STATIC_CACHE = `${CACHE_VERSION}-static`
 
 self.addEventListener('install', (event) => {
